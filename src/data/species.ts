@@ -10,6 +10,9 @@ export interface Species {
   hungerRate: number // hunger points per second
   feedCost: number
   space: number // pen tiles wanted per animal to be happy
+  social: boolean // unhappy when alone, and herds together
+  predator: boolean // stresses other species sharing its pen
+  sleepiness: number // 0..1, how often it naps during the day
 }
 
 export const SPECIES: Species[] = [
@@ -24,6 +27,9 @@ export const SPECIES: Species[] = [
     hungerRate: 1.6,
     feedCost: 4,
     space: 6,
+    social: true,
+    predator: false,
+    sleepiness: 0.15,
   },
   {
     id: 'giraffe',
@@ -36,6 +42,9 @@ export const SPECIES: Species[] = [
     hungerRate: 1.2,
     feedCost: 6,
     space: 9,
+    social: true,
+    predator: false,
+    sleepiness: 0.15,
   },
   {
     id: 'elephant',
@@ -48,6 +57,9 @@ export const SPECIES: Species[] = [
     hungerRate: 1.0,
     feedCost: 12,
     space: 14,
+    social: true,
+    predator: false,
+    sleepiness: 0.2,
   },
   {
     id: 'lion',
@@ -60,6 +72,9 @@ export const SPECIES: Species[] = [
     hungerRate: 2.0,
     feedCost: 9,
     space: 10,
+    social: true,
+    predator: true,
+    sleepiness: 0.6,
   },
   {
     id: 'penguin',
@@ -72,5 +87,8 @@ export const SPECIES: Species[] = [
     hungerRate: 2.2,
     feedCost: 2,
     space: 3,
+    social: true,
+    predator: false,
+    sleepiness: 0.1,
   },
 ]

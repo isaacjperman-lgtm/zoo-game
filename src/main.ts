@@ -2,7 +2,7 @@ import './style.css'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Game } from './game'
-import { N, T_GRASS, T_PATH, T_PEN, toWorld, toTile, inBounds } from './config'
+import { N, T_GRASS, T_PATH, T_PEN, T_BOOTH, toWorld, toTile, inBounds } from './config'
 import { SPECIES } from './data/species'
 import { animateRig } from './entities/models'
 import { createEnvironment } from './world/environment'
@@ -79,18 +79,15 @@ function rebuildTiles() {
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++) {
       const t = game.tile(x, y),
+        paved = t === T_PATH || t === T_BOOTH,
         i = y * N + x,
         n = noise(x, y)
-      dummy.position.set(toWorld(x), t === T_PATH ? 0.01 : 0, toWorld(y))
+      dummy.position.set(toWorld(x), paved ? 0.01 : 0, toWorld(y))
       dummy.rotation.set(0, 0, 0)
-      dummy.scale.set(
-        t === T_PATH ? 0.95 : 1,
-        t === T_PATH ? 1.4 : t === T_PEN ? 0.9 : 1,
-        t === T_PATH ? 0.95 : 1,
-      )
+      dummy.scale.set(paved ? 0.95 : 1, paved ? 1.4 : t === T_PEN ? 0.9 : 1, paved ? 0.95 : 1)
       dummy.updateMatrix()
       tileMesh.setMatrixAt(i, dummy.matrix)
-      if (t === T_PATH) col.setHSL(0.11, 0.3, 0.5 + n * 0.07)
+      if (paved) col.setHSL(0.11, 0.3, 0.5 + n * 0.07)
       else if (t === T_PEN) col.setHSL(0.09, 0.4, 0.36 + n * 0.05)
       else col.setHSL(0.27 + n * 0.02, 0.5, 0.25 + n * 0.04 + ((x + y) & 1) * 0.02)
       tileMesh.setColorAt(i, col)
@@ -201,7 +198,8 @@ cv.addEventListener('contextmenu', (e) => e.preventDefault())
 const keys = new Set<string>()
 addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase())
-  if (e.key === ' ') {
+  if (e.key === 'Escape') hud.tool = ''
+  else if (e.key === ' ') {
     speed = speed === 0 ? 1 : 0
     e.preventDefault()
   } else if ('123'.includes(e.key) && e.key) speed = +e.key
@@ -256,11 +254,11 @@ function frame() {
 
   // animation
   for (const an of game.animals) animateRig(an.group, t + an.tx, !!an.target, real)
-  for (const v of game.visitors) animateRig(v.group, t, v.state !== 'watching' && v.path.length > 0, real)
-  for (const k of game.keepers) animateRig(k.group, t, !!k.target, real)
+  for (const v of game.visitors) animateRig(v.group, t, v.moving, real)
+  for (const k of game.keepers) animateRig(k.group, t, k.moving, real)
 
   // cursor + hover info
-  cursor.visible = !!hoverTile
+  cursor.visible = !!hoverTile && hud.tool !== ''
   if (hoverTile) {
     cursor.position.set(toWorld(hoverTile.x), 0.075, toWorld(hoverTile.y))
     const c =

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { N, toWorld } from '../config'
+import { N, BOOTH, toWorld } from '../config'
+import { mat, personModel } from '../entities/models'
 
 function rng(seed: number) {
   return () => {
@@ -211,6 +212,51 @@ export function createEnvironment(scene: THREE.Scene) {
   const signCore = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.9, 0.1), wood)
   signCore.position.set(gx, 1.95, gz)
   scene.add(signFront, signBack, signCore)
+
+  // ---- ticket booth (beside the desk tile just inside the gate) ----
+  const booth = new THREE.Group()
+  booth.position.set(toWorld(BOOTH.x), 0, toWorld(BOOTH.y))
+  const part = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(geo, mat(color))
+    m.position.set(x, y, z)
+    m.castShadow = m.receiveShadow = true
+    booth.add(m)
+    return m
+  }
+  part(new THREE.BoxGeometry(0.06, 1.1, 0.9), 0xe9dcc0, 0.42, 0.55, 0) // back wall
+  part(new THREE.BoxGeometry(0.9, 1.1, 0.06), 0xe9dcc0, 0, 0.55, 0.42) // side walls
+  part(new THREE.BoxGeometry(0.9, 1.1, 0.06), 0xe9dcc0, 0, 0.55, -0.42)
+  part(new THREE.BoxGeometry(0.12, 0.08, 0.96), 0x6b4a2e, -0.42, 0.62, 0) // counter
+  const roof = part(new THREE.ConeGeometry(0.85, 0.45, 4), 0xb23a3a, 0, 1.33, 0)
+  roof.rotation.y = Math.PI / 4
+  const clerk = personModel(0x8a2d2d)
+  clerk.position.set(0.12, 0.02, 0)
+  clerk.rotation.y = -Math.PI / 2
+  booth.add(clerk)
+  const bc = document.createElement('canvas')
+  bc.width = 256
+  bc.height = 72
+  const bx = bc.getContext('2d')!
+  bx.fillStyle = '#27493a'
+  bx.fillRect(0, 0, 256, 72)
+  bx.strokeStyle = '#e8d9a8'
+  bx.lineWidth = 4
+  bx.strokeRect(5, 5, 246, 62)
+  bx.fillStyle = '#f2e6bd'
+  bx.textAlign = 'center'
+  bx.textBaseline = 'middle'
+  bx.font = '700 38px Georgia, serif'
+  bx.fillText('TICKETS', 128, 38)
+  const btex = new THREE.CanvasTexture(bc)
+  btex.colorSpace = THREE.SRGBColorSpace
+  const bsign = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 0.225),
+    new THREE.MeshStandardMaterial({ map: btex }),
+  )
+  bsign.position.set(-0.47, 0.98, 0)
+  bsign.rotation.y = -Math.PI / 2
+  booth.add(bsign)
+  scene.add(booth)
 
   // ---- sky ----
   const skyMat = new THREE.ShaderMaterial({

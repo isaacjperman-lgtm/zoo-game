@@ -20,12 +20,15 @@ A browser-based 3D zoo simulator (Three.js + Vite + TypeScript) made for a coupl
 - `src/entities/models.ts` builds the procedural low-poly animal and person meshes and `animateRig` (leg/arm swing). `src/world/environment.ts` builds the sky dome, trees, perimeter fence, gate and clouds. `src/ui/hud.ts` is the DOM HUD (styles in `src/style.css`), and `src/ui/thumbs.ts` renders the shop icons from the 3D models.
 - `src/data/species.ts` is the data-driven animal list. Adding a `Species` entry automatically adds a shop button, a procedural model (built in `animalModel`) and its hunger and space needs.
 
+- `src/ai/` holds per-entity behavior called from `Game.update`: `animalAI.ts` (needs, sleep, herding), `keeperAI.ts` (job state machine) and `visitorAI.ts` (queue, register, tour, leave). `src/world/pathfinding.ts` is the BFS over path tiles.
+
 ## Gameplay loop to keep in mind
 
-- Visitors only spawn if at least one animal's pen borders a path tile that is reachable from the entrance (`viewingSpots`). They pay admission at spawn and tip based on nearby animals' happiness.
+- Guests spawn on the road outside the gate (only if an animal is visible from a path connected to the entrance), queue to the ticket desk tile, pay `ADMISSION` at registration, tour enclosures (favorite species, unseen and happy animals preferred), then leave. Long waits make them leave angry. Their mood on leaving feeds `Game.rating`.
+- The entrance, desk and booth tiles are fixed (`isFixed` in `config.ts`) and can't be built over.
 - Animal happiness is a function of hunger and of pen size per animal of the same species (`Species.space`).
 - Removing a pen tile under an animal sells it for half price (`revalidateAnimals`).
-- Keepers walk straight to the hungriest animal and feed it. They do not use path tiles.
+- Keepers pick a hungry, nearby animal, walk the paths to a spot beside its pen, step in, feed, and step back out. Animals sleep at night, nap by day, herd together if social, and get scared if a predator shares their pen.
 
 ## Not yet implemented
 

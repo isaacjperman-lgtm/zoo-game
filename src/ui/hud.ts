@@ -149,11 +149,11 @@ export function createHud(
       b.dataset.id = it.id
       b.innerHTML = `<div class="pic">${it.icon}</div><div class="nm">${it.name}</div><div class="pr">${it.price ? fmt(it.price) : 'Free'}</div>`
       b.onclick = () => {
+        // Buttons that act immediately (like hiring) also deselect the current tool,
+        // so the next click on the map doesn't accidentally build something.
         if (it.action) it.action()
-        else {
-          tool = it.id
-          syncActive()
-        }
+        tool = it.action ? '' : it.id
+        syncActive()
       }
       b.onmouseenter = () => {
         const r = b.getBoundingClientRect()
@@ -221,7 +221,7 @@ export function createHud(
         hoverEl.classList.remove('on')
         return
       }
-      hoverEl.innerHTML = `<b>${a.species.name}</b>${bar('Hunger', a.hunger, a.hunger > 60 ? 'bad' : 'warn')}${bar('Happiness', a.happiness, a.happiness < 40 ? 'bad' : 'good')}`
+      hoverEl.innerHTML = `<b>${a.species.name}</b><div class="status">${a.status[0].toUpperCase() + a.status.slice(1)}</div>${bar('Hunger', a.hunger, a.hunger > 60 ? 'bad' : 'warn')}${bar('Happiness', a.happiness, a.happiness < 40 ? 'bad' : 'good')}${a.issues.length ? `<div class="issues">${a.issues.join(' · ')}</div>` : ''}`
       hoverEl.style.left = x + 16 + 'px'
       hoverEl.style.top = y + 16 + 'px'
       hoverEl.classList.add('on')

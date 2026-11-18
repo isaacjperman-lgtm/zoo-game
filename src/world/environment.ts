@@ -196,9 +196,9 @@ export function createEnvironment(scene: THREE.Scene) {
   cx.fillStyle = '#f2e6bd'
   cx.textAlign = 'center'
   cx.textBaseline = 'middle'
-  cx.font = '700 150px Georgia, serif'
-  ;(cx as unknown as { letterSpacing: string }).letterSpacing = '24px'
-  cx.fillText('ZOO', 524, 140)
+  cx.font = '700 104px Georgia, serif'
+  ;(cx as unknown as { letterSpacing: string }).letterSpacing = '12px'
+  cx.fillText('ZOO KEEPER', 524, 140)
   const tex = new THREE.CanvasTexture(cv)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 8

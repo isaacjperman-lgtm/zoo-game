@@ -10,6 +10,7 @@ import { createHud } from './ui/hud'
 import { makeThumbnails } from './ui/thumbs'
 
 const game = new Game()
+if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game // for debugging in the console
 const loaded = game.load()
 
 // ---------- renderer ----------
@@ -19,14 +20,14 @@ renderer.setSize(innerWidth, innerHeight)
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.toneMapping = THREE.ACESFilmicToneMapping
-renderer.toneMappingExposure = 1.05
+renderer.toneMappingExposure = 0.95
 document.body.prepend(renderer.domElement)
 
 const scene = new THREE.Scene()
 scene.fog = new THREE.Fog(0xb4d8f0, 70, 260)
 scene.add(game.root)
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1500)
-camera.position.set(0, 26, 38)
+camera.position.set(0, 24, 42)
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.mouseButtons = {
   LEFT: -1 as unknown as THREE.MOUSE,
@@ -38,7 +39,7 @@ controls.minDistance = 6
 controls.maxDistance = 90
 controls.enableDamping = true
 controls.dampingFactor = 0.08
-controls.target.set(0, 0, 8)
+controls.target.set(0, 0, 12)
 
 const sun = new THREE.DirectionalLight(0xffffff, 3)
 sun.castShadow = true
@@ -89,9 +90,9 @@ function rebuildTiles() {
       )
       dummy.updateMatrix()
       tileMesh.setMatrixAt(i, dummy.matrix)
-      if (t === T_PATH) col.setHSL(0.11, 0.28, 0.6 + n * 0.07)
-      else if (t === T_PEN) col.setHSL(0.1, 0.38, 0.46 + n * 0.05)
-      else col.setHSL(0.28 + n * 0.015, 0.42, 0.34 + n * 0.045 + ((x + y) & 1) * 0.015)
+      if (t === T_PATH) col.setHSL(0.11, 0.3, 0.5 + n * 0.07)
+      else if (t === T_PEN) col.setHSL(0.09, 0.4, 0.36 + n * 0.05)
+      else col.setHSL(0.27 + n * 0.02, 0.5, 0.25 + n * 0.04 + ((x + y) & 1) * 0.02)
       tileMesh.setColorAt(i, col)
       if (t !== T_PEN) continue
       for (const [dx, dy] of [
@@ -247,9 +248,9 @@ function frame() {
   sun.position.copy(sunDir).multiplyScalar(80).add(sun.target.position)
   const dayK = THREE.MathUtils.smoothstep(elev, -0.05, 0.2)
   if (elev < 0) sun.position.set(-sunDir.x * 60, 60, 25) // moonlight comes from the opposite side
-  sun.intensity = elev > 0 ? Math.min(1, elev * 4) * 3.2 : (1 - dayK) * 0.35
+  sun.intensity = elev > 0 ? Math.min(1, elev * 4) * 3.2 : (1 - dayK) * 0.9
   sun.color.setHSL(elev > 0 ? 0.1 : 0.62, elev < 0.3 ? (elev > 0 ? 0.75 : 0.5) : 0.15, elev > 0 ? 0.9 : 0.75)
-  hemi.intensity = 0.28 + dayK * 0.45
+  hemi.intensity = 0.7 - dayK * 0.2
   hemi.color.setHSL(0.58, 0.6, 0.6 + dayK * 0.3)
   env.update(real, elev, sunDir, camera.position)
 

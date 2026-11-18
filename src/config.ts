@@ -7,7 +7,7 @@ export const ENTRANCE = { x: N >> 1, y: N - 1 }
 export const ADMISSION = 10
 export const KEEPER_WAGE = 25
 export const KEEPER_COST = 150
-export const DAY_LENGTH = 90 // seconds
+export const DAY_LENGTH = 150 // seconds
 export const COSTS = { path: 5, pen: 10 }
 
 export const idx = (x: number, y: number) => y * N + x

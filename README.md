@@ -1,4 +1,4 @@
-# Zoo
+# Zoo Keeper
 
 A 3D zoo simulator that runs in the browser (Three.js + Vite + TypeScript).
 

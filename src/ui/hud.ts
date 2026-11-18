@@ -43,7 +43,7 @@ export function createHud(
   root.innerHTML = `
     <div class="vignette"></div>
     <header class="topbar">
-      <div class="panel brand"><div class="logo">${ICON.paw}</div><div><div class="title">Zoo</div><div class="sub" id="clock"></div></div></div>
+      <div class="panel brand"><div class="logo">${ICON.paw}</div><div><div class="title">Zoo Keeper</div><div class="sub" id="clock"></div></div></div>
       <div class="panel stats">
         <div class="stat"><span class="lbl">Funds</span><span class="val money" id="s-money"></span></div>
         <div class="stat"><span class="lbl">Guests</span><span class="val" id="s-guests"></span></div>

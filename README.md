@@ -31,11 +31,11 @@ npm run format     # prettier
 
 ## About this project
 
-This game was built with [Claude Code](https://claude.com/claude-code), an AI coding assistant, working from direction by Isaac for his friends Levi and Micah. Features are added as Micah requests them.
+This game was built with [Claude Code](https://claude.com/claude-code), an AI coding assistant, working from direction by its author. Features are added as they are requested.
 
 What that means in practice:
 
 - **The code, 3D models and interface were AI-written.** Every animal, person, tree and menu is generated in code. There are no hand-made art assets or imported models.
 - **It has had limited playtesting.** The project type-checks and builds, but the AI could not run it in a browser to look at it, so visual problems and gameplay bugs are likely. Please report anything that looks or feels off.
-- **The design is generic on purpose.** This is a base version. Specific features come later from Micah's requests.
+- **The design is generic on purpose.** This is a base version. Specific features come later as they are requested.
 - **Balance is guesswork.** Prices, wages, hunger rates and visitor rates in `src/config.ts` and `src/data/species.ts` were picked without tuning against real play.

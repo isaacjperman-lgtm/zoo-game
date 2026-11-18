@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A browser-based 3D zoo simulator (Three.js + Vite + TypeScript) made for Isaac's friends Levi and Micah. The current version is a generic base. Micah will request specific features later, so keep the code easy to extend and data-driven.
+A browser-based 3D zoo simulator (Three.js + Vite + TypeScript) made for a couple of friends. The current version is a generic base. Specific features will be requested later, so keep the code easy to extend and data-driven.
 
 ## Commands
 

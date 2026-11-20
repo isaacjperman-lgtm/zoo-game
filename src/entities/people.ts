@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { ENTRANCE, toWorld, toTile } from '../config'
 import { SPECIES } from '../data/species'
-import { personModel } from './models'
+import { personModel, mat } from './models'
 import type { Animal } from './animal'
 import type { Prop } from '../game'
 
@@ -85,7 +85,13 @@ abstract class Walker {
 
 export type VisitorState = 'queue' | 'register' | 'walking' | 'watching' | 'using' | 'leaving'
 
+/** Ordinary guests, plus the members of rare events: school kids and their teacher, and the zoo critic. */
+export type VisitorKind = 'guest' | 'child' | 'teacher' | 'critic'
+
 export class Visitor extends Walker {
+  kind: VisitorKind = 'guest'
+  /** School trips walk as a group: the teacher (first) leads, the kids tend to follow their choice of animal. */
+  party: Visitor[] | null = null
   state: VisitorState = 'queue'
   timer = 0
   /** How many more enclosures they want to see before going home. */
@@ -107,10 +113,45 @@ export class Visitor extends Walker {
   sawHappy = 0
   scenery = 0
   ateFood = false
+  /** Price complaints (review tags) and whether they thought the visit was good value. */
+  gripes = new Set<string>()
+  valued = false
+  /** 1 = full-price ticket; school kids pay less, their teacher nothing. Party guests don't haggle over prices. */
+  ticketFactor = 1
+  priceSensitive = true
   focus: Animal | null = null
   lane = (Math.random() - 0.5) * 0.3
-  constructor() {
-    super(personModel(new THREE.Color().setHSL(Math.random(), 0.5, 0.5).getHex()), 1.2 + Math.random() * 0.5)
+  constructor(kind: VisitorKind = 'guest') {
+    const shirt =
+      kind === 'teacher'
+        ? 0xd9a441
+        : kind === 'critic'
+          ? 0x2b2b33
+          : new THREE.Color().setHSL(Math.random(), kind === 'child' ? 0.8 : 0.5, 0.5).getHex()
+    super(personModel(shirt), 1.2 + Math.random() * 0.5)
+    this.kind = kind
+    if (kind === 'child') {
+      this.group.scale.setScalar(0.72)
+      this.ticketFactor = 0.5
+      this.priceSensitive = false
+      this.stops = 3 + Math.floor(Math.random() * 2)
+      this.speed *= 1.1
+    } else if (kind === 'teacher') {
+      this.ticketFactor = 0
+      this.priceSensitive = false
+      this.stops = 3
+      this.satisfaction = 70
+    } else if (kind === 'critic') {
+      this.stops = 5
+      this.satisfaction = 45 // hard to impress
+      const hat = new THREE.Group()
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.015, 12), mat(0x1a1a1f))
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.09, 10), mat(0x1a1a1f))
+      crown.position.y = 0.05
+      hat.add(brim, crown)
+      hat.position.y = 0.7
+      this.group.add(hat)
+    }
     // arrive from down the road, outside the gate
     this.group.position.set(toWorld(ENTRANCE.x) + (Math.random() - 0.5) * 1.5, 0, toWorld(ENTRANCE.y) + 10)
     this.group.rotation.y = Math.PI

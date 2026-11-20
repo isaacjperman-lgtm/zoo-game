@@ -189,6 +189,10 @@ const hud = createHud(game, makeThumbnails(), {
   },
   save: () => game.save(),
   reset: () => game.reset(),
+  rename: (name) => {
+    env.setSign(name)
+    document.title = name
+  },
 })
 game.onMessage = (m) => {
   hud.toast(m)
@@ -202,6 +206,9 @@ game.onIncome = (x, z, amount) => {
   hud.floatText((proj.x * 0.5 + 0.5) * innerWidth, (-proj.y * 0.5 + 0.5) * innerHeight, '+$' + amount)
   sound.coin()
 }
+env.setSign(game.zooName)
+document.title = game.zooName
+if (!loaded) hud.showTitle()
 if (!loaded) hud.toast('Build a path from the gate, add an enclosure, then buy an animal.')
 
 // ---------- input ----------

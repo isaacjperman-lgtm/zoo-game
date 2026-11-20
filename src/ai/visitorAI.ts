@@ -1,6 +1,6 @@
 import type { Game } from '../game'
 import { Visitor } from '../entities/people'
-import { ADMISSION, FOOD_PRICE, GIFT_PRICE, DESK, ENTRANCE, N, T_PATH, toWorld } from '../config'
+import { DESK, ENTRANCE, N, T_PATH, toWorld } from '../config'
 import { reachable } from '../world/pathfinding'
 import { writeReview } from './reviews'
 
@@ -14,7 +14,7 @@ const QUEUE_SPACING = 0.55
 export function updateVisitors(g: Game, dt: number) {
   g.spawnTimer -= dt
   if (g.spawnTimer <= 0 && g.isDay) {
-    g.spawnTimer = Math.max(2, 14 - g.rating / 9)
+    g.spawnTimer = Math.max(2, 14 - g.rating / 9) / g.demand // dearer tickets mean fewer guests
     if (g.animals.length && g.hasViewingSpots()) {
       const v = new Visitor()
       g.visitors.push(v)
@@ -46,16 +46,22 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
           g.queue.splice(slot, 1)
           v.state = 'leaving'
           v.path = [{ x: ENTRANCE.x, y: N + 9 }]
-          g.addReview(v, {
-            ...writeReview(g, v),
-            text: 'Gave up waiting for a ticket',
-            tags: ['Long entrance queue'],
-          })
+          if (v.kind !== 'child')
+            g.addReview(v, {
+              ...writeReview(g, v),
+              text: 'Gave up waiting for a ticket',
+              tags: ['Long entrance queue'],
+            })
         }
       } else {
         // the ticket is paid for the moment they reach the booth, not when they leave
-        g.earn(ADMISSION, v.group.position.x, v.group.position.z)
+        g.earn(Math.round(g.ticketPrice * v.ticketFactor), v.group.position.x, v.group.position.z)
         g.totalVisitors++
+        if (v.priceSensitive) judgePrice(v, g.ticketPrice, g.fair.ticket, 'Overpriced tickets', 25, 0.6)
+        if (v.kind === 'teacher') {
+          const kids = (v.party?.length ?? 1) - 1
+          g.earn(30 + kids * 8, v.group.position.x, v.group.position.z) // the school's donation
+        }
         v.state = 'register'
         v.timer = 2 + Math.random() * 1.5
         v.face(toWorld(DESK.x) + 1, toWorld(DESK.y)) // clerk is in the booth to the east
@@ -90,7 +96,10 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
       if ((v.timer -= dt) > 0) break
       if (a && g.animals.includes(a)) {
         const joy = a.happiness * (a.status === 'sleeping' ? 0.5 : 1)
-        v.satisfaction += (joy - 50) / 8 + (a.species.id === v.favorite ? 4 : 0)
+        const bar = v.kind === 'critic' ? 65 : 50 // critics are harder to please
+        const gain = (joy - bar) / 8
+        v.satisfaction +=
+          (v.kind === 'child' && gain > 0 ? gain * 1.5 : gain) + (a.species.id === v.favorite ? 4 : 0)
         const deco = g.decorNear(v.px, v.py)
         v.satisfaction += Math.min(4, deco) // pleasant scenery
         v.scenery += Math.min(4, deco)
@@ -107,7 +116,9 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
       if (v.step(dt)) {
         g.root.remove(v.group)
         g.visitors.splice(g.visitors.indexOf(v), 1)
-        g.recordGuestMood(Math.max(0, Math.min(100, v.satisfaction)))
+        const mood = Math.max(0, Math.min(100, v.satisfaction))
+        g.recordGuestMood(mood)
+        if (v.kind === 'critic') criticVerdict(g, mood)
       }
       break
   }
@@ -121,7 +132,16 @@ function planNext(g: Game, v: Visitor) {
 
   // Basic needs come first.
   const need = v.food > 65 ? 'food' : v.bladder > 60 ? 'restroom' : null
-  if (need) {
+  const tooDear = need === 'food' && v.priceSensitive && g.foodPrice > g.fair.food * 1.6
+  if (need && tooDear) {
+    // they're hungry but won't pay these prices: grumble once and carry on touring
+    v.gripes.add('Overpriced food')
+    if (!v.complained.has('foodprice')) {
+      v.complained.add('foodprice')
+      v.satisfaction -= 8
+    }
+    v.food = 20
+  } else if (need) {
     const s = g.nearestService(need, b)
     if (s) {
       v.errand = s.prop
@@ -143,6 +163,7 @@ function planNext(g: Game, v: Visitor) {
     spots.sort((p, q) => p.d - q.d)
     const score =
       (a.species.id === v.favorite ? 3 : 1) *
+        (v.party && v.party[0] !== v && v.party[0].focus === a ? 3 : 1) * // kids follow their teacher
         (v.visited.has(a) ? 0.2 : 1) *
         (0.4 + a.happiness / 100) *
         (1 / (1 + spots[0].d * 0.04)) +
@@ -157,22 +178,39 @@ function planNext(g: Game, v: Visitor) {
   v.path = g.pathTo(b, best.x, best.y)
 }
 
+/** A guest's reaction to a price: unhappy above what they think is fair, a little pleased below it. */
+function judgePrice(v: Visitor, price: number, fair: number, tag: string, maxPenalty: number, k: number) {
+  v.satisfaction += Math.min(6, Math.max(-maxPenalty, (fair - price) * k))
+  if (price > fair * 1.4) v.gripes.add(tag)
+  else if (price < fair * 0.75) v.valued = true
+}
+
 /** Apply the effect of the building a guest just finished using, then carry on. */
 function finishErrand(g: Game, v: Visitor) {
   const p = v.errand
   v.errand = null
   const pos = v.group.position
   if (p?.id === 'food') {
-    g.earn(FOOD_PRICE, pos.x, pos.z)
+    g.earn(g.foodPrice, pos.x, pos.z)
     v.ateFood = true
     v.food = 0
     v.satisfaction += 8
+    if (v.priceSensitive) judgePrice(v, g.foodPrice, g.fair.food, 'Overpriced food', 6, 0.8)
   } else if (p?.id === 'restroom') {
     v.bladder = 0
     v.satisfaction += 5
   } else if (p?.id === 'gift') {
-    g.earn(Math.round(GIFT_PRICE * (0.5 + v.satisfaction / 100)), pos.x, pos.z)
-    v.satisfaction += 4
+    // happy guests buy souvenirs more readily; steep prices put people off
+    const chance = !v.priceSensitive
+      ? v.kind === 'child'
+        ? 0.85
+        : 0.5
+      : Math.min(1, Math.max(0.2, v.satisfaction / 100 + 0.2)) *
+        Math.min(1, (g.fair.gift / Math.max(1, g.giftPrice)) * 1.1)
+    if (Math.random() < chance) {
+      g.earn(g.giftPrice, pos.x, pos.z)
+      v.satisfaction += 4
+    } else if (v.priceSensitive && g.giftPrice > g.fair.gift * 1.4) v.gripes.add('Overpriced souvenirs')
     return leave(g, v)
   }
   if (v.stops > 0 && g.isDay) planNext(g, v)
@@ -197,7 +235,7 @@ function finishTour(g: Game, v: Visitor) {
 
 function leave(g: Game, v: Visitor) {
   v.state = 'leaving'
-  g.addReview(v, writeReview(g, v))
+  if (v.kind !== 'child') g.addReview(v, writeReview(g, v)) // the teacher speaks for the school trip
   v.focus = null
   v.path = []
   if (g.tile(v.px, v.py) === T_PATH) {
@@ -206,4 +244,41 @@ function leave(g: Game, v: Visitor) {
       v.path = [...g.pathTo(b, ENTRANCE.x, ENTRANCE.y), { x: ENTRANCE.x, y: N + 9 }]
     }
   }
+}
+
+// ---- rare events ----
+
+/** A teacher and 5-9 kids arrive together. Kids pay half price and love the animals; the school donates too. */
+export function spawnSchoolTrip(g: Game) {
+  const teacher = new Visitor('teacher')
+  const party = [teacher]
+  const kids = 5 + Math.floor(Math.random() * 5)
+  for (let i = 0; i < kids; i++) party.push(new Visitor('child'))
+  party.forEach((v, i) => {
+    v.party = party
+    v.group.position.z += i * 0.5 // arrive in a line
+    g.visitors.push(v)
+    g.queue.push(v)
+    g.root.add(v.group)
+  })
+  g.onMessage(`A school trip of ${kids} kids has arrived!`)
+}
+
+/** A zoo critic tours the zoo. Their opinion counts three times toward guest mood and can earn a bonus. */
+export function spawnCritic(g: Game) {
+  const v = new Visitor('critic')
+  g.visitors.push(v)
+  g.queue.push(v)
+  g.root.add(v.group)
+  g.onMessage('A zoo critic has arrived. Impress them!')
+}
+
+function criticVerdict(g: Game, mood: number) {
+  g.recordGuestMood(mood)
+  g.recordGuestMood(mood)
+  if (mood >= 70) {
+    g.money += 250
+    g.onMessage('The critic raved about your zoo! +$250')
+  } else if (mood < 40) g.onMessage('The critic panned your zoo. Guests will hear about it.')
+  else g.onMessage('The critic thought your zoo was just okay.')
 }

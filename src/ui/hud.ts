@@ -25,6 +25,9 @@ const STAR =
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const fmt = (n: number) => '$' + Math.floor(n).toLocaleString('en-US')
+const set0 = (e: HTMLInputElement, v: string) => {
+  if (e.value !== v) e.value = v
+}
 const set = (e: HTMLElement, t: string) => {
   if (e.textContent !== t) e.textContent = t
 }
@@ -41,13 +44,13 @@ interface Item {
 export function createHud(
   game: Game,
   thumbs: Record<string, string>,
-  act: { speed(n: number): void; save(): void; reset(): void },
+  act: { speed(n: number): void; save(): void; reset(): void; rename(name: string): void },
 ) {
   const root = document.getElementById('ui')!
   root.innerHTML = `
     <div class="vignette"></div>
     <header class="topbar">
-      <div class="panel brand"><div class="logo">${ICON.paw}</div><div><div class="title">Zoo Keeper</div><div class="sub" id="clock"></div></div></div>
+      <div class="panel brand"><div class="logo">${ICON.paw}</div><div><input class="title zname" id="zname" maxlength="28" spellcheck="false" title="Click to rename your zoo" /><div class="sub" id="clock"></div></div></div>
       <div class="panel stats">
         <div class="stat"><span class="lbl">Funds</span><span class="val money" id="s-money"></span></div>
         <div class="stat"><span class="lbl">Guests</span><span class="val" id="s-guests"></span></div>
@@ -62,6 +65,7 @@ export function createHud(
         <button data-speed="3" title="Faster (3)">3×</button>
         <span class="divider"></span>
         <button id="b-sound" title="Sound effects"></button>
+        <button id="b-prices" title="Set ticket, food and gift shop prices">Prices</button>
         <button id="b-reviews" title="What guests think of the zoo">Reviews</button>
         <button id="b-save">Save</button><button id="b-reset" class="danger">New game</button>
       </div>
@@ -138,13 +142,122 @@ export function createHud(
       .slice(0, 14)
       .map(
         (r) =>
-          `<div class="rev"><span class="face">${moodFace(r.score)}</span><div><div class="rtext">“${esc(r.text)}”</div><div class="status">Day ${r.day} · ${r.score}% happy</div></div></div>`,
+          `<div class="rev"><span class="face">${moodFace(r.score)}</span><div><div class="rtext">“${esc(r.text)}”</div><div class="status">Day ${r.day} · ${r.score}% happy${r.who === 'school' ? ' · 🎒 School trip' : r.who === 'critic' ? ' · 🧐 Critic' : ''}</div></div></div>`,
       )
       .join('')
   }
   $('#b-reviews').onclick = () => {
     sound.click()
+    togglePrices(false)
     toggleReviews()
+  }
+
+  // ---- prices panel ----
+  const ppanel = document.createElement('aside')
+  ppanel.className = 'panel rpanel ppanel'
+  const kinds = [
+    ['ticket', 'Ticket', 'Charged when a guest reaches the booth'],
+    ['food', 'Food stand', 'Charged per snack'],
+    ['gift', 'Gift shop', 'Charged per souvenir'],
+  ] as const
+  ppanel.innerHTML =
+    `<button class="close" title="Close">×</button><div class="rhead"><span class="face">💰</span><div><b>Prices</b><div class="status">Click − / + (Shift for ±5)</div></div></div>` +
+    kinds
+      .map(
+        ([k, n, tip]) =>
+          `<div class="prow" data-k="${k}" title="${tip}"><span class="pn">${n}</span><button data-d="-1">−</button><b class="pv"></b><button data-d="1">+</button><div class="pf"></div></div>`,
+      )
+      .join('')
+  root.append(ppanel)
+  const togglePrices = (on = !ppanel.classList.contains('on')) => ppanel.classList.toggle('on', on)
+  ppanel.querySelector<HTMLElement>('.close')!.onclick = () => togglePrices(false)
+  ppanel.querySelectorAll<HTMLButtonElement>('.prow button').forEach((b) => {
+    b.onclick = (e) => {
+      const k = (b.parentElement as HTMLElement).dataset.k as 'ticket' | 'food' | 'gift'
+      const cur = k === 'ticket' ? game.ticketPrice : k === 'food' ? game.foodPrice : game.giftPrice
+      game.setPrice(k, cur + +b.dataset.d! * (e.shiftKey ? 5 : 1))
+      sound.click()
+    }
+  })
+  function updatePrices() {
+    if (!ppanel.classList.contains('on')) return
+    const fair = game.fair
+    for (const row of ppanel.querySelectorAll<HTMLElement>('.prow')) {
+      const k = row.dataset.k as 'ticket' | 'food' | 'gift'
+      const price = k === 'ticket' ? game.ticketPrice : k === 'food' ? game.foodPrice : game.giftPrice
+      set(row.querySelector<HTMLElement>('.pv')!, fmt(price))
+      const f = fair[k]
+      const verdict = price > f * 1.4 ? 'Too dear' : price < f * 0.75 ? 'Bargain' : 'Fair'
+      const pf = row.querySelector<HTMLElement>('.pf')!
+      set(pf, `Guests expect about ${fmt(f)} · ${verdict}`)
+      pf.dataset.v = verdict
+    }
+    const dem = Math.round(game.demand * 100)
+    set(ppanel.querySelector<HTMLElement>('.pdemand')!, `Visitor turnout at this ticket price: ${dem}%`)
+  }
+  ppanel.insertAdjacentHTML('beforeend', '<div class="status pdemand"></div>')
+  $('#b-prices').onclick = () => {
+    sound.click()
+    toggleReviews(false)
+    togglePrices()
+  }
+
+  // ---- zoo name ----
+  const zname = $<HTMLInputElement>('#zname')
+  zname.value = game.zooName
+  zname.onchange = () => {
+    game.zooName = zname.value.trim() || 'Zoo Keeper'
+    zname.value = game.zooName
+    act.rename(game.zooName)
+  }
+  zname.onkeydown = (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter' || e.key === 'Escape') zname.blur()
+  }
+  const NAME_A = [
+    'Sunny',
+    'Maple',
+    'Riverbend',
+    'Willow',
+    'Golden',
+    'Little',
+    'Clover',
+    'Evergreen',
+    'Bramble',
+    'Harbor',
+  ]
+  const NAME_B = ['Acres', 'Hollow', 'Valley', 'Meadow', 'Ridge', 'Park', 'Grove', 'Bay']
+  const randomName = () =>
+    `${NAME_A[(Math.random() * NAME_A.length) | 0]} ${NAME_B[(Math.random() * NAME_B.length) | 0]} Zoo`
+  /** The opening screen of a new game: name the zoo, then open the gates. The simulation waits until then. */
+  function showTitle() {
+    act.speed(0)
+    const t = document.createElement('div')
+    t.className = 'title-screen'
+    t.innerHTML = `<div class="tcard panel"><div class="logo big">${ICON.paw}</div><h1>Zoo Keeper</h1><p>Build paths and enclosures, welcome animals and guests, and keep everyone happy.</p><label for="tname">Name your zoo</label><div class="trow"><input id="tname" maxlength="28" spellcheck="false" /><button class="dice" title="Suggest a name">🎲</button></div><button class="start">Open the gates</button></div>`
+    root.append(t)
+    const input = t.querySelector<HTMLInputElement>('#tname')!
+    input.value = randomName()
+    t.querySelector<HTMLElement>('.dice')!.onclick = () => {
+      input.value = randomName()
+      sound.click()
+    }
+    const start = () => {
+      game.zooName = input.value.trim() || randomName()
+      zname.value = game.zooName
+      act.rename(game.zooName)
+      sound.click()
+      t.classList.add('out')
+      setTimeout(() => t.remove(), 500)
+      act.speed(1)
+    }
+    t.querySelector<HTMLElement>('.start')!.onclick = start
+    input.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') start()
+    }
+    input.focus()
+    input.select()
   }
 
   let selected: Animal | null = null
@@ -375,6 +488,7 @@ export function createHud(
       syncActive()
     },
     toast,
+    showTitle,
     get selected() {
       return selected
     },
@@ -404,6 +518,8 @@ export function createHud(
       if (selected && !game.animals.includes(selected)) select(null) // sold or lost its pen
       if (selected) updateCard(selected)
       renderReviews()
+      updatePrices()
+      if (document.activeElement !== zname) set0(zname, game.zooName)
       const cg = game.currentGoal
       goalEl.style.display = cg ? '' : 'none'
       if (cg) {

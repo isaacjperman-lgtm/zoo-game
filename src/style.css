@@ -682,3 +682,145 @@ button.danger:hover {
   background: rgba(236, 112, 99, 0.14);
   font-weight: 700;
 }
+
+.zname {
+  width: 190px;
+  padding: 0 4px;
+  margin-left: -4px;
+  font-family: inherit;
+  background: transparent;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  color: var(--text);
+  pointer-events: auto;
+}
+.zname:hover,
+.zname:focus {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+.title-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(17, 24, 21, 0.55), rgba(8, 12, 10, 0.92));
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+  transition: opacity 0.5s;
+}
+.title-screen.out {
+  opacity: 0;
+  pointer-events: none;
+}
+.tcard {
+  width: min(420px, calc(100vw - 32px));
+  padding: 28px 28px 24px;
+  text-align: center;
+}
+.tcard h1 {
+  margin: 6px 0 4px;
+  font-size: 34px;
+}
+.tcard p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.tcard label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.logo.big {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto;
+}
+.trow {
+  display: flex;
+  gap: 8px;
+}
+.trow input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.dice,
+.start {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+.dice {
+  width: 44px;
+  font-size: 18px;
+}
+.start {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  background: #3d8b4f;
+}
+.start:hover {
+  background: #4aa05f;
+}
+.prow {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.prow .pn {
+  font-weight: 700;
+}
+.prow button {
+  width: 28px;
+  height: 28px;
+  font: inherit;
+  font-weight: 800;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.prow .pv {
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.prow .pf {
+  grid-column: 1 / -1;
+  margin-top: -2px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.prow .pf[data-v='Too dear'] {
+  color: var(--red);
+}
+.prow .pf[data-v='Bargain'] {
+  color: var(--green);
+}
+.pdemand {
+  margin-top: 14px;
+}

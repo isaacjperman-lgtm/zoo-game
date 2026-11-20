@@ -7,6 +7,8 @@ export interface Review {
   score: number // 0..100
   text: string
   tags: string[]
+  /** Set for special visitors, so the panel can label them. */
+  who?: 'school' | 'critic'
 }
 
 interface Remark {
@@ -33,6 +35,13 @@ export function writeReview(g: Game, v: Visitor): Review {
     bad.push({ text: 'Waited ages to get in', weight: v.waited / 10, tag: 'Long entrance queue' })
   if (v.complained.has('food')) bad.push({ text: 'Nowhere to buy food', weight: 4, tag: 'No food stand' })
   if (v.complained.has('restroom')) bad.push({ text: 'No restrooms!', weight: 4, tag: 'No restroom' })
+  const gripeText: Record<string, string> = {
+    'Overpriced tickets': 'Tickets cost too much',
+    'Overpriced food': 'Food is too expensive',
+    'Overpriced souvenirs': 'Souvenirs cost a fortune',
+  }
+  for (const t of v.gripes) bad.push({ text: gripeText[t] ?? t, weight: 4.5, tag: t })
+  if (v.valued && !v.gripes.size) good.push({ text: 'Great value for money', weight: 3 })
   if (v.sawSad > 0)
     bad.push({ text: 'Some animals looked miserable', weight: 3 + v.sawSad, tag: 'Unhappy animals' })
   if (v.visited.size <= 1 && v.satisfaction < 70)
@@ -59,7 +68,8 @@ export function writeReview(g: Game, v: Visitor): Review {
   let chosen = score >= 85 || score < 25 ? pick(lead) : [...pick(lead).slice(0, 1), ...pick(rest).slice(0, 1)]
   if (!chosen.length) chosen = pick(rest).slice(0, 1)
   const text = chosen.length ? chosen.map((r) => r.text).join('. ') : score >= 55 ? 'Nice day out' : 'Meh'
-  return { day: g.day, score, text, tags: bad.filter((r) => r.tag).map((r) => r.tag!) }
+  const who = v.kind === 'teacher' ? 'school' : v.kind === 'critic' ? 'critic' : undefined
+  return { day: g.day, score, text, tags: bad.filter((r) => r.tag).map((r) => r.tag!), who }
 }
 
 function favSpecies(v: Visitor) {

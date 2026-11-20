@@ -189,17 +189,26 @@ export function createEnvironment(scene: THREE.Scene) {
   cv.width = 1024
   cv.height = 272
   const cx = cv.getContext('2d')!
-  cx.fillStyle = '#27493a'
-  cx.fillRect(0, 0, 1024, 272)
-  cx.strokeStyle = '#e8d9a8'
-  cx.lineWidth = 10
-  cx.strokeRect(18, 18, 988, 236)
-  cx.fillStyle = '#f2e6bd'
-  cx.textAlign = 'center'
-  cx.textBaseline = 'middle'
-  cx.font = '700 104px Georgia, serif'
-  ;(cx as unknown as { letterSpacing: string }).letterSpacing = '12px'
-  cx.fillText('ZOO KEEPER', 524, 140)
+  /** Paint the entrance sign with the zoo's name, shrinking the lettering to fit long names. */
+  const drawSign = (name: string) => {
+    cx.fillStyle = '#27493a'
+    cx.fillRect(0, 0, 1024, 272)
+    cx.strokeStyle = '#e8d9a8'
+    cx.lineWidth = 10
+    cx.strokeRect(18, 18, 988, 236)
+    cx.fillStyle = '#f2e6bd'
+    cx.textAlign = 'center'
+    cx.textBaseline = 'middle'
+    const text = name.toUpperCase()
+    ;(cx as unknown as { letterSpacing: string }).letterSpacing = '12px'
+    let size = 104
+    do {
+      cx.font = `700 ${size}px Georgia, serif`
+      size -= 4
+    } while (cx.measureText(text).width > 900 && size > 28)
+    cx.fillText(text, 524, 140)
+  }
+  drawSign('Zoo Keeper')
   const tex = new THREE.CanvasTexture(cv)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 8
@@ -332,6 +341,10 @@ export function createEnvironment(scene: THREE.Scene) {
     bot = new THREE.Color()
 
   return {
+    setSign(name: string) {
+      drawSign(name)
+      tex.needsUpdate = true
+    },
     update(dt: number, elev: number, sunDir: THREE.Vector3, cam: THREE.Vector3) {
       const k1 = sm(elev, -0.25, 0.05),
         k2 = sm(elev, 0.05, 0.4)

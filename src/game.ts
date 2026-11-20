@@ -13,6 +13,7 @@ import {
   KEEPER_WAGE,
   KEEPER_COST,
   DAY_LENGTH,
+  PRICE_LIMITS,
   COSTS,
   idx,
   inBounds,
@@ -25,7 +26,7 @@ import { Visitor, Keeper } from './entities/people'
 import { bfs, pathTo, reachable, type Bfs } from './world/pathfinding'
 import { updateAnimal } from './ai/animalAI'
 import { updateKeeper } from './ai/keeperAI'
-import { updateVisitors } from './ai/visitorAI'
+import { updateVisitors, spawnSchoolTrip, spawnCritic } from './ai/visitorAI'
 import { resolveCollisions } from './world/collision'
 import { BUILDINGS } from './data/buildings'
 import { propModel } from './entities/props'
@@ -43,6 +44,10 @@ export interface Prop {
 export class Game {
   tiles = new Uint8Array(N * N)
   money = 1000
+  zooName = 'Zoo Keeper'
+  ticketPrice = PRICE_LIMITS.ticket.def
+  foodPrice = PRICE_LIMITS.food.def
+  giftPrice = PRICE_LIMITS.gift.def
   day = 1
   time = 0.3 // 0..1 of day, 0.25 = noon
   animals: Animal[] = []
@@ -86,6 +91,27 @@ export class Game {
     if (!this.animals.length) return 0
     const animals = this.animals.reduce((a, b) => a + b.happiness, 0) / this.animals.length
     return this.totalVisitors > 0 ? animals * 0.7 + this.guestMood * 0.3 : animals
+  }
+
+  /**
+   * What guests think each thing is worth. A better zoo can charge more: the fair price grows with the rating.
+   * Charging above it annoys guests (and, for tickets, keeps some of them away); charging below it pleases them.
+   */
+  get fair() {
+    const r = Math.max(30, this.rating)
+    return { ticket: 5 + r * 0.2, food: 6 + r * 0.05, gift: 8 + r * 0.14 }
+  }
+  /** 0.3..1.4: how many guests turn up relative to normal at the current ticket price. */
+  get demand() {
+    return Math.min(1.4, Math.max(0.3, this.fair.ticket / Math.max(1, this.ticketPrice)))
+  }
+
+  setPrice(kind: 'ticket' | 'food' | 'gift', v: number) {
+    const lim = PRICE_LIMITS[kind]
+    const n = Math.min(lim.max, Math.max(lim.min, Math.round(v)))
+    if (kind === 'ticket') this.ticketPrice = n
+    else if (kind === 'food') this.foodPrice = n
+    else this.giftPrice = n
   }
 
   tile(x: number, y: number) {
@@ -334,6 +360,24 @@ export class Game {
     return this.animals.some((a) => this.spotsFor(a, b).length > 0)
   }
 
+  // ---- rare events ----
+  /** Special visits scheduled for later today, as a fraction of the day. */
+  events: { kind: 'school' | 'critic'; at: number }[] = []
+  /** Start an event now (also handy from the console: `game.startEvent('school')`). */
+  startEvent(kind: 'school' | 'critic') {
+    if (!this.animals.length || !this.hasViewingSpots()) return
+    if (kind === 'school') spawnSchoolTrip(this)
+    else spawnCritic(this)
+  }
+  /** Each new day has a small chance of a school trip, and a smaller one of a critic. Both need a decent zoo. */
+  private rollEvents() {
+    this.events = []
+    if (this.day >= 3 && this.animals.length >= 2 && this.rating >= 30 && Math.random() < 0.12)
+      this.events.push({ kind: 'school', at: 0.06 + Math.random() * 0.2 })
+    if (this.day >= 5 && this.totalVisitors >= 20 && this.animals.length >= 4 && Math.random() < 0.07)
+      this.events.push({ kind: 'critic', at: 0.06 + Math.random() * 0.25 })
+  }
+
   // ---- simulation ----
   update(dt: number) {
     this.time += dt / DAY_LENGTH
@@ -341,6 +385,11 @@ export class Game {
       this.time -= 1
       this.endDay()
     }
+    for (const e of [...this.events])
+      if (this.time >= e.at) {
+        this.events.splice(this.events.indexOf(e), 1)
+        this.startEvent(e.kind)
+      }
     for (const a of this.animals) updateAnimal(this, a, dt)
     for (const k of this.keepers) updateKeeper(this, k, dt)
     updateVisitors(this, dt)
@@ -353,6 +402,7 @@ export class Game {
 
   private endDay() {
     this.day++
+    this.rollEvents()
     const wages = this.keepers.length * KEEPER_WAGE
     if (wages) {
       this.money -= wages
@@ -395,6 +445,8 @@ export class Game {
         goal: this.goalIndex,
         guests: this.totalVisitors,
         mood: this.guestMood,
+        name: this.zooName,
+        prices: [this.ticketPrice, this.foodPrice, this.giftPrice],
         reviews: this.reviews,
       }),
     )
@@ -415,6 +467,8 @@ export class Game {
       this.totalVisitors = d.guests ?? 0
       this.guestMood = d.mood ?? 70
       this.reviews = d.reviews ?? []
+      this.zooName = d.name ?? this.zooName
+      if (d.prices) [this.ticketPrice, this.foodPrice, this.giftPrice] = d.prices
       for (const p of d.props ?? []) this.addProp(p.id, p.x, p.y)
       this.orientProps()
       if (!d.gates) this.autoGates() // old saves predate gates

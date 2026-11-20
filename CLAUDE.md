@@ -41,8 +41,11 @@ The simulation (`Game`) has no DOM code. `main.ts` and `ui/` read its state each
 - Animal happiness drops with hunger, a cramped pen (`Species.space`), loneliness (social species) and a predator in the pen. Animals sleep at night and nap by day.
 - Buildings go on open grass, face the nearest path, and must be cleared before building a path or pen there. Clearing refunds half. Removing a pen tile under an animal sells it for half price.
 - Enclosures get a gate automatically (`Game.autoGates`) on the pen tile nearest the entrance by path. Keepers only enter and leave through gates, and the gate doors open only while a keeper is near. There is no gate tool.
+- Prices are player-set (`Game.ticketPrice`, `foodPrice`, `giftPrice`, edited in the Prices panel). Guests compare them with `Game.fair`, which grows with the rating: dear tickets lower turnout (`Game.demand`) and mood, steep food or souvenir prices make guests refuse and complain, cheap ones please them. Complaints become review tags in `ai/reviews.ts`.
+- The zoo has a name (`Game.zooName`), chosen on the title screen of a new game and editable in the top bar. It is painted on the entrance sign via `env.setSign`.
+- Rare events (`Game.rollEvents`, started with `game.startEvent('school' | 'critic')`): a school trip (teacher plus kids who pay half and follow the teacher) and a zoo critic whose verdict counts triple toward guest mood. Special visitors are `Visitor.kind`.
 - Clicking a tool-less action (like Hire) deselects the current tool, and Esc deselects too.
 
 ## Not yet implemented
 
-Rapier physics, a title screen and zoo naming, and a test suite.
+Rapier physics and a test suite.

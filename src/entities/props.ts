@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { mat, personModel } from './models'
+import { mat, isFlatColor, personModel } from './models'
+import { bakeModel } from './bake'
 
 /** Shared by every lamp so main.ts can switch them all on at night. */
 export const lampMat = new THREE.MeshStandardMaterial({
@@ -224,5 +225,5 @@ export function propModel(id: string) {
       break
     }
   }
-  return g
+  return bakeModel(g, isFlatColor) // one draw call for the building's plain parts
 }

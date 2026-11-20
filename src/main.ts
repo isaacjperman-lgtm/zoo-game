@@ -9,6 +9,7 @@ import { createEnvironment } from './world/environment'
 import { createHud } from './ui/hud'
 import { makeThumbnails } from './ui/thumbs'
 import { sound } from './ui/sound'
+import { createFirstPerson } from './ui/firstPerson'
 import { lampMat, lampGlowMat, stageLightMat } from './entities/props'
 import type { Animal } from './entities/animal'
 import type { Keeper } from './entities/people'
@@ -19,15 +20,20 @@ const loaded = game.load()
 
 // ---------- renderer ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+const maxRatio = Math.min(devicePixelRatio, 2)
+let ratio = Math.min(maxRatio, 1.75) // hi-dpi screens start a little under full resolution
+renderer.setPixelRatio(ratio)
 renderer.setSize(innerWidth, innerHeight)
 renderer.shadowMap.enabled = true
+renderer.shadowMap.autoUpdate = false // refreshed every other frame, see optimizeShadows
+renderer.shadowMap.needsUpdate = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 0.95
 document.body.prepend(renderer.domElement)
 
 const scene = new THREE.Scene()
+if (import.meta.env.DEV) (window as unknown as { renderer: THREE.WebGLRenderer }).renderer = renderer // for debugging in the console
 scene.fog = new THREE.Fog(0xb4d8f0, 70, 260)
 scene.add(game.root)
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1500)
@@ -196,7 +202,9 @@ function rebuildTiles() {
   if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true
   railMesh.instanceMatrix.needsUpdate = postMesh.instanceMatrix.needsUpdate = true
 }
-game.onTilesChanged = rebuildTiles
+// Painting a drag of tiles fires this many times per frame; the terrain is rebuilt once, in the frame loop.
+let tilesDirty = false
+game.onTilesChanged = () => (tilesDirty = true)
 rebuildTiles()
 
 // ---------- UI ----------
@@ -207,7 +215,7 @@ const hud = createHud(game, makeThumbnails(), {
   },
   save: () => game.save(),
   reset: () => game.reset(),
-  photo: () => takePhoto(),
+  photo: () => fp.toggle(),
   rename: (name) => {
     env.setSign(name)
     document.title = name
@@ -302,6 +310,7 @@ function entityAt(t: { x: number; y: number } | null): Animal | Keeper | null {
 }
 let rightDown: { x: number; y: number } | null = null
 cv.addEventListener('pointerdown', (e) => {
+  if (fp.active) return
   if (e.button === 2) rightDown = { x: e.clientX, y: e.clientY } // a right click inspects; a right drag orbits
   if (e.button !== 0) return
   down = true
@@ -309,6 +318,7 @@ cv.addEventListener('pointerdown', (e) => {
   if (t) use(t, false)
 })
 cv.addEventListener('pointerup', (e) => {
+  if (fp.active) return
   if (e.button !== 2 || !rightDown) return
   const moved = Math.hypot(e.clientX - rightDown.x, e.clientY - rightDown.y)
   rightDown = null
@@ -318,6 +328,7 @@ cv.addEventListener('pointerup', (e) => {
 })
 addEventListener('pointerup', () => (down = false))
 cv.addEventListener('pointermove', (e) => {
+  if (fp.active) return
   lastX = e.clientX
   lastY = e.clientY
   hoverTile = pick(e)
@@ -329,29 +340,103 @@ const keys = new Set<string>()
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return // typing in a text field
   keys.add(e.key.toLowerCase())
+  const key = e.key.toLowerCase()
+  if (fp.active && (key === 'escape' || key === 'p')) return fp.exit()
+  if (fp.active && (key === 'enter' || key === 'f')) return fp.shoot()
   if (e.key === 'Escape') {
     hud.tool = ''
     hud.escape()
-  } else if (e.key.toLowerCase() === 'p') takePhoto()
+  } else if (key === 'p') fp.enter()
   else if (e.key === ' ') {
     speed = speed === 0 ? 1 : 0
     e.preventDefault()
   } else if ('123'.includes(e.key) && e.key) speed = +e.key
 })
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()))
+const fp = createFirstPerson({
+  camera,
+  canvas: renderer.domElement,
+  controls,
+  game,
+  keys,
+  root: document.getElementById('ui')!,
+  shutter: takePhoto,
+  onChange: (on) => {
+    hud.tool = ''
+    hud.select(null)
+    if (on) hud.toast('Photo mode: walk around and take a picture')
+  },
+})
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(innerWidth, innerHeight)
 })
 
+// ---------- performance ----------
+// If frames take too long the picture is rendered at a lower resolution, and it creeps back up when there is
+// headroom. ?fixedres in the address turns this off (useful when measuring).
+const fixedRes = location.search.includes('fixedres')
+let frameAvg = 1 / 60,
+  slowFor = 0,
+  fastFor = 0,
+  adaptCooldown = 2
+function setRatio(r: number) {
+  ratio = r
+  renderer.setPixelRatio(ratio)
+  renderer.setSize(innerWidth, innerHeight)
+}
+function adaptResolution(dt: number) {
+  frameAvg += (dt - frameAvg) * 0.05
+  if (fixedRes || (adaptCooldown -= dt) > 0) return
+  if (frameAvg > 1 / 40) ((slowFor += dt), (fastFor = 0))
+  else if (frameAvg < 1 / 56) ((fastFor += dt), (slowFor = 0))
+  else slowFor = fastFor = 0
+  if (slowFor > 1.5 && ratio > 0.7) {
+    setRatio(Math.max(0.7, ratio - 0.15))
+    slowFor = 0
+    adaptCooldown = 2
+  } else if (fastFor > 5 && ratio < maxRatio) {
+    setRatio(Math.min(maxRatio, ratio + 0.1))
+    fastFor = 0
+    adaptCooldown = 3
+  }
+}
+// Shadows are the most expensive part of the picture, since every caster is drawn a second time. They refresh every
+// other frame (the sun moves slowly), and guests far from the camera, whose shadows would be a few pixels, don't
+// cast one at all.
+let shadowFrame = 0,
+  shadowLodT = 0
+function optimizeShadows(dt: number) {
+  renderer.shadowMap.needsUpdate = (shadowFrame++ & 1) === 0
+  if ((shadowLodT -= dt) > 0) return
+  shadowLodT = 0.3
+  const c = camera.position
+  for (const v of game.visitors) {
+    const d = Math.hypot(v.group.position.x - c.x, v.group.position.y - c.y, v.group.position.z - c.z)
+    const want = v.shadowOn ? d < 40 : d < 32 // a little hysteresis so they don't flicker at the edge
+    if (want !== v.shadowOn) {
+      v.shadowOn = want
+      v.group.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) o.castShadow = want
+      })
+    }
+  }
+}
+
 // ---------- photo mode ----------
 const flash = document.createElement('div')
 flash.className = 'flash'
 document.body.append(flash)
 /** Save what the camera sees (without the interface) as a PNG with the zoo's name in the corner. */
-function takePhoto() {
-  renderer.render(scene, camera) // draw now so the canvas holds the current frame
+function takePhoto(): string {
+  // draw now at full resolution with fresh shadows, so the canvas holds a good frame
+  if (ratio !== maxRatio) {
+    renderer.setPixelRatio(maxRatio)
+    renderer.setSize(innerWidth, innerHeight)
+  }
+  renderer.shadowMap.needsUpdate = true
+  renderer.render(scene, camera)
   const src = renderer.domElement
   const c = document.createElement('canvas')
   c.width = src.width
@@ -365,6 +450,7 @@ function takePhoto() {
   x.shadowBlur = size * 0.3
   x.fillStyle = 'rgba(255,255,255,0.95)'
   x.fillText(`${game.zooName} · Day ${game.day}`, size, c.height - size * 0.8)
+  if (ratio !== maxRatio) setRatio(ratio) // back to the working resolution
   c.toBlob((blob) => {
     if (!blob) return
     const a = document.createElement('a')
@@ -378,6 +464,12 @@ function takePhoto() {
   flash.classList.add('go')
   sound.click()
   hud.toast('Photo saved')
+  // a small preview for the viewfinder
+  const t = document.createElement('canvas')
+  t.width = 240
+  t.height = Math.round((240 * c.height) / c.width)
+  t.getContext('2d')!.drawImage(c, 0, 0, t.width, t.height)
+  return t.toDataURL('image/jpeg', 0.7)
 }
 
 // ---------- loop ----------
@@ -395,26 +487,32 @@ const lampLights = Array.from({ length: LAMP_LIGHTS }, () => {
   scene.add(l)
   return l
 })
-function updateLampLight(night: number) {
+let lampList: { group: THREE.Group }[] = []
+let lampT = 0
+function updateLampLight(night: number, dt: number) {
   lampGlowMat.opacity = night * 0.65
-  const lamps = [...game.props.values()].filter((p) => p.id === 'lamp')
-  const c = controls.target
-  lamps.sort(
-    (a, b) =>
-      Math.hypot(a.group.position.x - c.x, a.group.position.z - c.z) -
-      Math.hypot(b.group.position.x - c.x, b.group.position.z - c.z),
-  )
-  lampLights.forEach((l, i) => {
-    const lamp = lamps[i]
-    if (!lamp || night < 0.02) {
-      l.intensity = 0
-      return
-    }
-    l.position.set(lamp.group.position.x, 1.5, lamp.group.position.z)
-    l.intensity = night * 6
-  })
+  if (night < 0.02) {
+    for (const l of lampLights) l.intensity = 0
+    return
+  }
+  // choosing the nearest lamps is done a few times a second, not every frame
+  if ((lampT -= dt) <= 0) {
+    lampT = 0.25
+    const c = fp.active ? fp.position : controls.target
+    lampList = [...game.props.values()]
+      .filter((p) => p.id === 'lamp')
+      .sort(
+        (a, b) =>
+          Math.hypot(a.group.position.x - c.x, a.group.position.z - c.z) -
+          Math.hypot(b.group.position.x - c.x, b.group.position.z - c.z),
+      )
+    lampLights.forEach((l, i) => {
+      const lamp = lampList[i]
+      if (lamp) l.position.set(lamp.group.position.x, 1.5, lamp.group.position.z)
+    })
+  }
+  lampLights.forEach((l, i) => (l.intensity = lampList[i] ? night * 6 : 0))
 }
-
 // ---------- weather ----------
 const RAIN = 3200
 const rainPos = new Float32Array(RAIN * 6)
@@ -445,14 +543,21 @@ function updateWeather(dt: number) {
   rain.visible = rainK > 0.02
   if (!rain.visible) return
   rainMat.opacity = rainK * 0.75
-  rain.position.set(controls.target.x, 0, controls.target.z)
+  const rc = fp.active ? fp.position : controls.target
+  rain.position.set(rc.x, 0, rc.z)
   for (let i = 0; i < RAIN; i++) {
     let y = rainBase[i * 3 + 1] - 30 * dt
     if (y < 0) y += 22
     rainBase[i * 3 + 1] = y
     const x = rainBase[i * 3],
       z = rainBase[i * 3 + 2]
-    rainPos.set([x, y, z, x - 0.08, y + 0.9, z], i * 6)
+    const o = i * 6
+    rainPos[o] = x
+    rainPos[o + 1] = y
+    rainPos[o + 2] = z
+    rainPos[o + 3] = x - 0.08
+    rainPos[o + 4] = y + 0.9
+    rainPos[o + 5] = z
   }
   rainGeo.attributes.position.needsUpdate = true
 }
@@ -485,11 +590,21 @@ function frame() {
   const real = Math.min(clock.getDelta(), 0.1),
     t = clock.elapsedTime
   game.update(real * speed)
+  if (tilesDirty) {
+    tilesDirty = false
+    rebuildTiles()
+  }
   animateGates(real)
+  adaptResolution(real)
+  optimizeShadows(real)
 
   // camera pan
-  const mx = +(keys.has('d') || keys.has('arrowright')) - +(keys.has('a') || keys.has('arrowleft'))
-  const mz = +(keys.has('s') || keys.has('arrowdown')) - +(keys.has('w') || keys.has('arrowup'))
+  const mx = fp.active
+    ? 0
+    : +(keys.has('d') || keys.has('arrowright')) - +(keys.has('a') || keys.has('arrowleft'))
+  const mz = fp.active
+    ? 0
+    : +(keys.has('s') || keys.has('arrowdown')) - +(keys.has('w') || keys.has('arrowup'))
   if (mx || mz) {
     camera.getWorldDirection(fwd)
     fwd.y = 0
@@ -503,8 +618,11 @@ function frame() {
     controls.target.add(d)
     hud.select(null) // panning away lets go of the animal
   }
-  followSelected(real)
-  controls.update()
+  if (fp.active) fp.update(real)
+  else {
+    followSelected(real)
+    controls.update()
+  }
 
   // sun cycle
   const a = game.time * Math.PI * 2,
@@ -516,7 +634,7 @@ function frame() {
   sun.intensity = elev > 0 ? Math.min(1, elev * 4) * 3.2 : (1 - dayK) * 0.9
   sun.color.setHSL(elev > 0 ? 0.1 : 0.62, elev < 0.3 ? (elev > 0 ? 0.75 : 0.5) : 0.15, elev > 0 ? 0.9 : 0.75)
   lampMat.emissiveIntensity = (1 - dayK) * 3
-  updateLampLight(1 - dayK)
+  updateLampLight(1 - dayK, real)
   hemi.intensity = 0.7 - dayK * 0.2
   hemi.color.setHSL(0.58, 0.6, 0.6 + dayK * 0.3)
   updateWeather(real)
@@ -549,7 +667,7 @@ function frame() {
   for (const k of game.keepers) animateRig(k.group, t, k.moving, real)
 
   // cursor + hover info
-  cursor.visible = !!hoverTile && hud.tool !== ''
+  cursor.visible = !fp.active && !!hoverTile && hud.tool !== ''
   if (hoverTile) {
     cursor.position.set(toWorld(hoverTile.x), 0.075, toWorld(hoverTile.y))
     const c =
@@ -557,9 +675,10 @@ function frame() {
     ;(cursorFill.material as THREE.MeshBasicMaterial).color.set(c)
     ;(cursorEdge.material as THREE.LineBasicMaterial).color.set(c)
   }
-  const over = hoverTile
-    ? (game.animals.find((an) => an.tx === hoverTile!.x && an.ty === hoverTile!.y) ?? null)
-    : null
+  const over =
+    hoverTile && !fp.active
+      ? (game.animals.find((an) => an.tx === hoverTile!.x && an.ty === hoverTile!.y) ?? null)
+      : null
   hud.showAnimal(over === hud.selected ? null : over, lastX, lastY)
   hud.update(speed)
 

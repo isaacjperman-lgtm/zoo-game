@@ -138,6 +138,8 @@ export class Visitor extends Walker {
   scenery = 0
   ateFood = false
   ateTreat = false
+  /** Whether this guest currently casts a shadow (far-away guests don't, to save drawing them twice). */
+  shadowOn = true
   sawShow = false
   sawBaby = 0
   sawSick = 0
@@ -158,7 +160,9 @@ export class Visitor extends Walker {
         ? 0xd9a441
         : kind === 'critic'
           ? 0x2b2b33
-          : new THREE.Color().setHSL(Math.random(), kind === 'child' ? 0.8 : 0.5, 0.5).getHex()
+          : new THREE.Color()
+              .setHSL(Math.floor(Math.random() * 24) / 24, kind === 'child' ? 0.8 : 0.5, 0.5)
+              .getHex()
     super(personModel(shirt), 1.2 + Math.random() * 0.5)
     this.kind = kind
     if (kind === 'child') {
@@ -204,6 +208,8 @@ export class Keeper extends Walker {
   /** Upgrade levels bought for this keeper, and how many animals they've fed. */
   levels: Record<UpgradeKind, number> = { speed: 0, skill: 0 }
   fed = 0
+  /** Idle keepers look for work a couple of times a second, not every frame. */
+  thinkT = Math.random() * 0.4
   /** Feeding keepers feed and treat; Breeding keepers only carry out the player's breeding orders. */
   duty: Duty = 'feed'
   /** The duty this keeper took the current job under. */

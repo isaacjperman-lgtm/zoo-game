@@ -27,7 +27,7 @@ export function updateAnimal(g: Game, a: Animal, dt: number) {
     return
   }
   const reg = g.region(a.tx, a.ty)
-  const inPen = g.animals.filter((o) => reg.some((r) => r[0] === o.tx && r[1] === o.ty))
+  const inPen = g.animalsIn(reg)
   const same = inPen.filter((o) => o.species === sp).length
   const stressed = !sp.predator && inPen.some((o) => o.species.predator)
   const slow = a.status === 'sleeping' || a.status === 'resting'

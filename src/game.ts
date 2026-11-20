@@ -41,6 +41,8 @@ import { GOALS } from './goals'
 import type { Species } from './data/species'
 import type { Review } from './ai/reviews'
 
+const DECOR_IDS = new Set(BUILDINGS.filter((b) => b.kind === 'decor').map((b) => b.id))
+
 export interface Prop {
   id: string
   x: number
@@ -166,6 +168,7 @@ export class Game {
     this.tiles[idx(x, y)] = type
     this.regionCache.clear()
     this.entranceBfs = null
+    this.gateCache = new WeakMap()
     if (cur === T_PEN) {
       this.gates.delete(idx(x, y))
       this.revalidateAnimals()
@@ -179,6 +182,19 @@ export class Game {
   // ---- gates (added automatically where an enclosure meets a path) ----
   /** True if some tile of this pen has a gate. */
   hasGate(reg: number[][]) {
+    return this.gateInfo(reg).has
+  }
+  /** Per-pen answers that every animal asks every frame; cleared whenever tiles or gates change. */
+  private gateCache = new WeakMap<number[][], { has: boolean; reach: boolean }>()
+  private gateInfo(reg: number[][]) {
+    let i = this.gateCache.get(reg)
+    if (!i) {
+      i = { has: this.hasGateRaw(reg), reach: this.gateReachableRaw(reg) }
+      this.gateCache.set(reg, i)
+    }
+    return i
+  }
+  private hasGateRaw(reg: number[][]) {
     return reg.some(([x, y]) => this.gates.has(idx(x, y)))
   }
   /** Gate openings of an animal's pen that a keeper can reach: the path tile outside and the gate tile inside. */
@@ -213,11 +229,13 @@ export class Game {
     group.position.set(toWorld(x), 0.05, toWorld(y))
     this.root.add(group)
     this.props.set(idx(x, y), { id, x, y, group })
+    this.propCounts.set(id, (this.propCounts.get(id) ?? 0) + 1)
   }
 
   private removeProp(p: Prop) {
     this.root.remove(p.group)
     this.props.delete(idx(p.x, p.y))
+    this.propCounts.set(p.id, (this.propCounts.get(p.id) ?? 1) - 1)
     this.money += Math.floor((BUILDINGS.find((b) => b.id === p.id)?.cost ?? 0) / 2)
     this.onSound('build')
   }
@@ -236,10 +254,10 @@ export class Game {
     return this.countProps('vet') > 0
   }
 
+  /** How many of each building exist. Kept up to date as buildings are added and removed, since it's asked often. */
+  private propCounts = new Map<string, number>()
   countProps(id: string) {
-    let n = 0
-    for (const p of this.props.values()) if (p.id === id) n++
-    return n
+    return this.propCounts.get(id) ?? 0
   }
 
   /** Nearest reachable building of this kind and the path tile to stand on to use it. */
@@ -262,7 +280,7 @@ export class Game {
   decorNear(x: number, y: number) {
     let n = 0
     for (const p of this.props.values()) {
-      if (BUILDINGS.find((b) => b.id === p.id)?.kind !== 'decor') continue
+      if (!DECOR_IDS.has(p.id)) continue
       if (Math.abs(p.x - x) <= 3 && Math.abs(p.y - y) <= 3) n++
     }
     return n
@@ -454,6 +472,22 @@ export class Game {
   hasViewingSpots() {
     const b = this.bfs(ENTRANCE.x, ENTRANCE.y)
     return this.animals.some((a) => this.spotsFor(a, b).length > 0)
+  }
+
+  // ---- who lives where ----
+  /** Animals grouped by the pen they are standing in, rebuilt once per update so each animal needn't search. */
+  private penIndex = new Map<number[][], Animal[]>()
+  animalsIn(reg: number[][]) {
+    return this.penIndex.get(reg) ?? []
+  }
+  private indexPens() {
+    this.penIndex.clear()
+    for (const a of this.animals) {
+      const reg = this.region(a.tx, a.ty)
+      const list = this.penIndex.get(reg)
+      if (list) list.push(a)
+      else this.penIndex.set(reg, [a])
+    }
   }
 
   // ---- breeding ----
@@ -676,6 +710,7 @@ export class Game {
         this.events.splice(this.events.indexOf(e), 1)
         this.startEvent(e.kind)
       }
+    this.indexPens()
     for (const a of this.animals) updateAnimal(this, a, dt)
     for (const k of this.keepers) updateKeeper(this, k, dt)
     updateVisitors(this, dt)
@@ -757,6 +792,7 @@ export class Game {
       this.tiles.set(d.tiles)
       this.regionCache.clear()
       this.entranceBfs = null
+      this.gateCache = new WeakMap()
       for (const i of d.gates ?? []) this.gates.add(i)
       this.ensureFixedTiles()
       this.money = d.money
@@ -836,7 +872,7 @@ export class Game {
             this.gates.delete(idx(rx, ry))
             changed = true
           }
-        if (this.gateReachable(reg)) continue // already usable
+        if (this.gateReachableRaw(reg)) continue // already usable
         // best tile whose neighboring path is linked to the entrance, nearest first
         let best: number | null = null
         let bestD = Infinity
@@ -846,17 +882,18 @@ export class Game {
               bestD = b.dist[idx(px, py)]
               best = idx(rx, ry)
             }
-        if (best === null && !this.hasGate(reg)) {
+        if (best === null && !this.hasGateRaw(reg)) {
           // nothing is linked yet: still give the pen a gate beside some path, so it works once linked
           for (const [rx, ry] of reg) if (best === null && pathsNext(rx, ry).length) best = idx(rx, ry)
         }
         if (best !== null) {
-          if (this.hasGate(reg) && bestD < Infinity)
+          if (this.hasGateRaw(reg) && bestD < Infinity)
             for (const [rx, ry] of reg) this.gates.delete(idx(rx, ry)) // replace the unusable one
           this.gates.add(best)
           changed = true
         }
       }
+    this.gateCache = new WeakMap()
     if (changed) this.onTilesChanged()
   }
   /** Distances along paths from the entrance, cached until the tiles change. */
@@ -866,6 +903,9 @@ export class Game {
   }
   /** True if some gate of this pen has a path next to it that is linked to the entrance. */
   gateReachable(reg: number[][]) {
+    return this.gateInfo(reg).reach
+  }
+  private gateReachableRaw(reg: number[][]) {
     const b = this.entranceReach()
     return reg.some(
       ([rx, ry]) =>

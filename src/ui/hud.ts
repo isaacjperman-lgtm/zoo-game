@@ -92,6 +92,8 @@ export function createHud(
     animals = $('#s-animals'),
     staff = $('#s-staff')
   const stars = [...$('#s-stars').querySelectorAll('svg')]
+  const speedBtns = [...root.querySelectorAll<HTMLElement>('[data-speed]')]
+  let lastCardCheck = 0
   const toastEl = $('#toast'),
     tip = $('#tip'),
     hoverEl = $('#hover'),
@@ -467,6 +469,8 @@ export function createHud(
     ],
   ]
 
+  const itemById = new Map(tabsDef.flatMap((t) => t[1]).map((i) => [i.id, i]))
+
   function renderItems() {
     itemsEl.innerHTML = ''
     const items = tabsDef.find((t) => t[0] === tab)![1]
@@ -630,13 +634,15 @@ export function createHud(
       set(staff, String(game.keepers.length))
       const r = game.rating / 20
       stars.forEach((s, i) => s.setAttribute('class', r >= i + 1 ? 'full' : r >= i + 0.5 ? 'half' : ''))
-      root
-        .querySelectorAll<HTMLElement>('[data-speed]')
-        .forEach((b) => b.classList.toggle('active', +b.dataset.speed! === speed))
-      itemsEl.querySelectorAll<HTMLElement>('.card').forEach((c) => {
-        const it = tabsDef.flatMap((t) => t[1]).find((i) => i.id === c.dataset.id)!
-        c.classList.toggle('poor', it.price > game.money)
-      })
+      speedBtns.forEach((b) => b.classList.toggle('active', +b.dataset.speed! === speed))
+      // which shop items you can't afford only needs refreshing a few times a second
+      const now = performance.now()
+      if (now - lastCardCheck > 200) {
+        lastCardCheck = now
+        itemsEl.querySelectorAll<HTMLElement>('.card').forEach((c) => {
+          c.classList.toggle('poor', itemById.get(c.dataset.id!)!.price > game.money)
+        })
+      }
     },
   }
 }

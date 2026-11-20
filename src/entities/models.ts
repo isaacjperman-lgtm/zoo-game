@@ -1,14 +1,51 @@
 import * as THREE from 'three'
 import type { Species } from '../data/species'
 
+import { bakeModel } from './bake'
+
 const cache = new Map<number, THREE.MeshStandardMaterial>()
+const flatMats = new WeakSet<THREE.Material>()
 export function mat(c: number) {
   let m = cache.get(c)
   if (!m) {
     m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.88, flatShading: true })
     cache.set(c, m)
+    flatMats.add(m)
   }
   return m
+}
+/** True for the plain flat-color materials made by `mat`, the only ones that can be merged into a baked mesh. */
+export const isFlatColor = (m: THREE.Material) => flatMats.has(m)
+
+/** Merge a finished model's pieces (see bake.ts), keeping its animated limbs as separate meshes. */
+function bake(g: THREE.Group) {
+  const rig = g.userData.rig as Rig | undefined
+  return bakeModel(g, isFlatColor, rig?.legs.map((l) => l.o) ?? [])
+}
+
+const templates = new Map<string, THREE.Group>()
+/**
+ * Build a model once per kind and hand out cheap copies that share its geometry and materials, so forty zebras
+ * cost one set of vertex buffers. The animation rig is re-pointed at each copy's own limbs.
+ */
+function fromTemplate(key: string, build: () => THREE.Group) {
+  let t = templates.get(key)
+  if (!t) {
+    t = bake(build())
+    templates.set(key, t)
+  }
+  const rig = t.userData.rig as Rig | undefined
+  delete t.userData.rig // Object3D.clone() copies userData as JSON, which can't hold the rig's object references
+  const c = t.clone(true)
+  if (rig) {
+    t.userData.rig = rig
+    const from: THREE.Object3D[] = []
+    const to: THREE.Object3D[] = []
+    t.traverse((o) => from.push(o))
+    c.traverse((o) => to.push(o))
+    c.userData.rig = { ...rig, legs: rig.legs.map((l) => ({ ...l, o: to[from.indexOf(l.o)] })) } satisfies Rig
+  }
+  return c
 }
 
 type Geo = THREE.BufferGeometry
@@ -540,7 +577,7 @@ const CUSTOM_MODELS: Record<string, (s: Species) => THREE.Group> = {
 }
 
 export function animalModel(s: Species) {
-  return (CUSTOM_MODELS[s.id] ?? quadruped)(s)
+  return fromTemplate('animal:' + s.id, () => (CUSTOM_MODELS[s.id] ?? quadruped)(s))
 }
 
 const SKINS = [0xf1c9a5, 0xd9a47a, 0xb97a52, 0x8a5a3a, 0xf6d7bd]
@@ -549,11 +586,17 @@ const PANTS = [0x2f3a55, 0x3d3d3d, 0x5b4a37, 0x2b4a3a]
 const pick = <T>(a: T[]) => a[(Math.random() * a.length) | 0]
 
 export function personModel(shirt: number, keeper = false) {
-  const g = new THREE.Group(),
-    legs: Limb[] = []
   const skin = pick(SKINS),
     hair = pick(HAIRS),
     pants = keeper ? 0x3b3f46 : pick(PANTS)
+  return fromTemplate(`person:${shirt}:${skin}:${hair}:${pants}:${keeper}`, () =>
+    buildPerson(shirt, keeper, skin, hair, pants),
+  )
+}
+
+function buildPerson(shirt: number, keeper: boolean, skin: number, hair: number, pants: number) {
+  const g = new THREE.Group(),
+    legs: Limb[] = []
   for (const sx of [-1, 1]) {
     const leg = new THREE.Group()
     leg.position.set(sx * 0.055, 0.27, 0)

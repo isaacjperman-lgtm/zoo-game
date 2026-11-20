@@ -1,6 +1,6 @@
 import type { Game } from '../game'
 import type { Keeper } from '../entities/people'
-import { BREEDING, T_PATH, TREAT_COST, toWorld } from '../config'
+import { BREEDING, N, T_PATH, TREAT_COST, toWorld } from '../config'
 
 /**
  * Keeper routine: pick the animal most worth feeding (hungry, and not too far away), walk the paths to
@@ -14,6 +14,14 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
   }
   switch (k.phase) {
     case 'idle': {
+      if (g.tile(k.px, k.py) !== T_PATH) {
+        // stranded off the paths (the gate or path they used changed under them): walk to the nearest path
+        const p = nearestPath(g, k.px, k.py)
+        if (p) k.moveTo(toWorld(p.x), toWorld(p.y), dt)
+        return
+      }
+      if ((k.thinkT -= dt) > 0) return
+      k.thinkT = 0.35 + Math.random() * 0.15
       const job = pickJob(g, k)
       if (!job) return
       k.target = job
@@ -59,6 +67,21 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
       }
       break
   }
+}
+
+function nearestPath(g: Game, x: number, y: number) {
+  let best: { x: number; y: number } | null = null
+  let bestD = Infinity
+  for (let ty = 0; ty < N; ty++)
+    for (let tx = 0; tx < N; tx++)
+      if (g.tile(tx, ty) === T_PATH) {
+        const d = (tx - x) ** 2 + (ty - y) ** 2
+        if (d < bestD) {
+          bestD = d
+          best = { x: tx, y: ty }
+        }
+      }
+  return best
 }
 
 function pickJob(g: Game, k: Keeper) {

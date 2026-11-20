@@ -1,0 +1,21 @@
+appId: game.zoo.keeper
+productName: Zoo Keeper
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - electron/**
+  - build/icon.png
+  - package.json
+compression: maximum
+artifactName: Zoo-Keeper-${version}-${os}-${arch}.${ext}
+linux:
+  target: AppImage
+  artifactName: Zoo-Keeper-${version}-linux-x64.${ext}
+  category: Game
+  icon: build/icon.png
+win:
+  target: portable
+  artifactName: Zoo-Keeper-${version}-win-x64.${ext}
+  icon: build/icon.png

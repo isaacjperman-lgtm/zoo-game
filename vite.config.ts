@@ -1,4 +1,7 @@
 import { defineConfig } from 'vite'
+import { readFileSync } from 'node:fs'
 
-// Relative base so the build works from any URL (GitHub Pages subpath, etc.)
-export default defineConfig({ base: './' })
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+
+// Relative base so the build works from any URL (GitHub Pages subpath, etc.) and from a desktop window's file:// page
+export default defineConfig({ base: './', define: { __APP_VERSION__: JSON.stringify(version) } })

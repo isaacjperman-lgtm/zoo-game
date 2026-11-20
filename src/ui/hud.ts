@@ -253,7 +253,7 @@ export function createHud(
     act.speed(0)
     const t = document.createElement('div')
     t.className = 'title-screen'
-    t.innerHTML = `<div class="tcard panel"><div class="logo big">${ICON.paw}</div><h1>Zoo Keeper</h1><p>Build paths and enclosures, welcome animals and guests, and keep everyone happy.</p><label for="tname">Name your zoo</label><div class="trow"><input id="tname" maxlength="28" spellcheck="false" /><button class="dice" title="Suggest a name">🎲</button></div><button class="start">Open the gates</button></div>`
+    t.innerHTML = `<div class="tcard panel"><div class="logo big">${ICON.paw}</div><h1>Zoo Keeper</h1><p>Build paths and enclosures, welcome animals and guests, and keep everyone happy.</p><label for="tname">Name your zoo</label><div class="trow"><input id="tname" maxlength="28" spellcheck="false" /><button class="dice" title="Suggest a name">🎲</button></div><button class="start">Open the gates</button><div class="ver">Version ${__APP_VERSION__}</div></div>`
     root.append(t)
     const input = t.querySelector<HTMLInputElement>('#tname')!
     input.value = randomName()

@@ -1255,3 +1255,9 @@ body.fp #ui > *:not(.fp-ui):not(#toast) {
   opacity: 1;
   transform: rotate(-3deg);
 }
+
+.tcard .ver {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}

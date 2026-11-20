@@ -8,6 +8,7 @@ Zoo Keeper: a browser-based 3D zoo simulator (Three.js + Vite + TypeScript) made
 
 ## Commands
 
+- `npm run app` builds and opens the game in a desktop window (Electron, `electron/main.cjs`). `npm run dist` builds `release/Zoo-Keeper-<version>-linux-x64.AppImage` and `release/Zoo-Keeper-<version>-win-x64.exe` (Wine is needed for the Windows one when building on Linux). `release/` is gitignored: the files are over GitHub's 100 MB limit, so they are published as assets of a GitHub release (`gh release create vX.Y.Z`). Bump `version` in `package.json` and add a `CHANGELOG.md` entry for each release; the version shows on the title screen. Fonts are bundled (`src/fonts.css`), so the game works offline.
 - `npm run dev` starts the Vite dev server (http://127.0.0.1:5173/). In dev only, `window.game` exposes the `Game` instance in the browser console, e.g. `game.money = 5000`.
 - `npm run build` runs `tsc --noEmit` and then `vite build`. `npm run typecheck` type-checks only.
 - `npm run format` runs Prettier over the repo (no semicolons, single quotes, width 110). Run it before committing.

@@ -81,7 +81,10 @@ export function updateAnimal(g: Game, a: Animal, dt: number) {
       p.z = a.target.z
       a.target = null
       a.wait = a.status === 'restless' ? 0.5 + Math.random() : 1 + Math.random() * 4
-      if (a.status === 'wandering' && Math.random() < sp.sleepiness * 0.3) {
+      if (
+        a.status === 'wandering' &&
+        Math.random() < sp.sleepiness * 0.3 * (g.weather === 'rain' ? 1.8 : 1)
+      ) {
         a.status = 'resting'
         a.restTimer = 8 + Math.random() * 14
       }

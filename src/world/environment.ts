@@ -338,18 +338,26 @@ export function createEnvironment(scene: THREE.Scene) {
     dTop = C(0x2f6fc4),
     dBot = C(0xb4d8f0)
   const top = new THREE.Color(),
-    bot = new THREE.Color()
+    bot = new THREE.Color(),
+    grey = new THREE.Color()
 
   return {
     setSign(name: string) {
       drawSign(name)
       tex.needsUpdate = true
     },
-    update(dt: number, elev: number, sunDir: THREE.Vector3, cam: THREE.Vector3) {
+    update(dt: number, elev: number, sunDir: THREE.Vector3, cam: THREE.Vector3, overcast = 0) {
       const k1 = sm(elev, -0.25, 0.05),
         k2 = sm(elev, 0.05, 0.4)
       top.copy(nTop).lerp(sTop, k1).lerp(dTop, k2)
       bot.copy(nBot).lerp(sBot, k1).lerp(dBot, k2)
+      if (overcast > 0) {
+        // grey the sky toward a flat tone of the same brightness
+        for (const c of [top, bot]) {
+          const l = (c.r + c.g + c.b) / 3
+          c.lerp(grey.setRGB(l * 0.9, l * 0.92, l * 0.95), overcast * 0.8)
+        }
+      }
       skyMat.uniforms.top.value.copy(top)
       skyMat.uniforms.bottom.value.copy(bot)
       if (scene.fog) scene.fog.color.copy(bot)
@@ -357,7 +365,7 @@ export function createEnvironment(scene: THREE.Scene) {
       stars.position.copy(cam)
       starMat.opacity = Math.min(1, Math.max(0, -elev * 3))
       sunDisc.position.copy(cam).addScaledVector(sunDir, 600)
-      sunDisc.visible = elev > -0.08
+      sunDisc.visible = elev > -0.08 && overcast < 0.6
       moonDisc.position.copy(cam).addScaledVector(sunDir, -600)
       moonDisc.visible = elev < 0.08
       cloudMat.color.setScalar(0.18 + 0.82 * sm(elev, -0.1, 0.35))

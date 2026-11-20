@@ -22,6 +22,13 @@ export const PRICE_LIMITS = {
 }
 export const KEEPER_WAGE = 25
 export const KEEPER_COST = 150
+/** Keeper upgrades: each can be bought up to `max` times; level n costs `cost * (n + 1)`. Each level adds to the daily wage. */
+export const KEEPER_UPGRADES = {
+  speed: { name: 'Running shoes', blurb: 'Walks 25% faster per level', max: 3, cost: 120 },
+  skill: { name: 'Animal training', blurb: 'Feeds earlier and faster per level', max: 3, cost: 150 },
+}
+export type UpgradeKind = keyof typeof KEEPER_UPGRADES
+export const WAGE_PER_LEVEL = 0.3 // wage rises by this fraction of the base per upgrade level
 export const DAY_LENGTH = 150 // seconds
 export const COSTS = { path: 5, pen: 10 }
 

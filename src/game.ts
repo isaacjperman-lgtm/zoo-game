@@ -10,7 +10,8 @@ import {
   DESK,
   BOOTH,
   isFixed,
-  KEEPER_WAGE,
+  KEEPER_UPGRADES,
+  type UpgradeKind,
   KEEPER_COST,
   DAY_LENGTH,
   PRICE_LIMITS,
@@ -235,6 +236,7 @@ export class Game {
   earn(amount: number, x: number, z: number) {
     if (amount <= 0) return
     this.money += amount
+    this.stats.todayIncome += amount
     this.onIncome(x, z, amount)
   }
 
@@ -311,6 +313,29 @@ export class Game {
     this.onMessage(`Sold ${a.name} for $${Math.floor(a.species.cost / 2)}`)
   }
 
+  /** Price of the next level of an upgrade, or null when the keeper has it maxed. */
+  upgradeCost(k: Keeper, kind: UpgradeKind) {
+    const u = KEEPER_UPGRADES[kind]
+    return k.levels[kind] >= u.max ? null : u.cost * (k.levels[kind] + 1)
+  }
+  upgradeKeeper(k: Keeper, kind: UpgradeKind) {
+    const cost = this.upgradeCost(k, kind)
+    if (cost === null) return
+    if (this.money < cost) return this.onMessage('Not enough money!')
+    this.money -= cost
+    k.levels[kind]++
+    k.applyUpgrades()
+    this.onSound('hire')
+    this.onMessage(`${k.name} learned ${KEEPER_UPGRADES[kind].name.toLowerCase()}`)
+  }
+  dismissKeeper(k: Keeper) {
+    const i = this.keepers.indexOf(k)
+    if (i < 0) return
+    this.keepers.splice(i, 1)
+    this.root.remove(k.group)
+    this.onMessage(`${k.name} has left the zoo`)
+  }
+
   hireKeeper() {
     if (this.money < KEEPER_COST) return this.onMessage('Not enough money!')
     this.money -= KEEPER_COST
@@ -360,6 +385,67 @@ export class Game {
     return this.animals.some((a) => this.spotsFor(a, b).length > 0)
   }
 
+  // ---- statistics ----
+  /** History for the Stats screen: funds and rating sampled through the day, plus one record per finished day. */
+  stats: {
+    samples: { t: number; money: number; rating: number }[]
+    days: { day: number; guests: number; income: number; money: number; rating: number }[]
+    todayGuests: number
+    todayIncome: number
+  } = { samples: [], days: [], todayGuests: 0, todayIncome: 0 }
+  private sampleT = 0
+  private sample() {
+    const s = this.stats.samples
+    s.push({ t: this.day + this.time, money: Math.round(this.money), rating: Math.round(this.rating) })
+    if (s.length > 320) s.shift() // about 40 days
+  }
+  private closeDayStats() {
+    const st = this.stats
+    st.days.push({
+      day: this.day - 1,
+      guests: st.todayGuests,
+      income: Math.round(st.todayIncome),
+      money: Math.round(this.money),
+      rating: Math.round(this.rating),
+    })
+    if (st.days.length > 40) st.days.shift()
+    st.todayGuests = 0
+    st.todayIncome = 0
+  }
+
+  // ---- weather ----
+  weather: 'sunny' | 'cloudy' | 'rain' = 'sunny'
+  private weatherT = 70
+  /** Rain keeps guests away, sunshine brings them out. */
+  get weatherDemand() {
+    return this.weather === 'rain' ? 0.55 : this.weather === 'sunny' ? 1.12 : 0.95
+  }
+  private updateWeather(dt: number) {
+    if ((this.weatherT -= dt) > 0) return
+    this.weatherT = 40 + Math.random() * 50
+    const r = Math.random()
+    const was = this.weather
+    this.weather =
+      was === 'sunny'
+        ? r < 0.55
+          ? 'sunny'
+          : 'cloudy'
+        : was === 'cloudy'
+          ? r < 0.35
+            ? 'sunny'
+            : r < 0.7
+              ? 'cloudy'
+              : 'rain'
+          : r < 0.5
+            ? 'cloudy'
+            : r < 0.8
+              ? 'rain'
+              : 'sunny'
+    if (this.weather === 'rain' && was !== 'rain')
+      this.onMessage("It's started to rain. Expect fewer guests.")
+    else if (was === 'rain' && this.weather !== 'rain') this.onMessage('The rain has stopped.')
+  }
+
   // ---- rare events ----
   /** Special visits scheduled for later today, as a fraction of the day. */
   events: { kind: 'school' | 'critic'; at: number }[] = []
@@ -385,6 +471,11 @@ export class Game {
       this.time -= 1
       this.endDay()
     }
+    this.updateWeather(dt)
+    if ((this.sampleT -= dt) <= 0) {
+      this.sampleT = DAY_LENGTH / 8
+      this.sample()
+    }
     for (const e of [...this.events])
       if (this.time >= e.at) {
         this.events.splice(this.events.indexOf(e), 1)
@@ -403,7 +494,8 @@ export class Game {
   private endDay() {
     this.day++
     this.rollEvents()
-    const wages = this.keepers.length * KEEPER_WAGE
+    this.closeDayStats()
+    const wages = this.keepers.reduce((s, k) => s + k.wage, 0)
     if (wages) {
       this.money -= wages
       this.onMessage(`Day ${this.day}: paid keepers $${wages}`)
@@ -439,7 +531,8 @@ export class Game {
           n: a.name,
           d: a.arrived,
         })),
-        keepers: this.keepers.length,
+        keepers: this.keepers.map((k) => ({ n: k.name, l: k.levels, f: k.fed })),
+        stats: this.stats,
         gates: [...this.gates],
         props: [...this.props.values()].map((p) => ({ id: p.id, x: p.x, y: p.y })),
         goal: this.goalIndex,
@@ -482,8 +575,16 @@ export class Game {
         this.animals.push(an)
         this.root.add(an.group)
       }
-      for (let i = 0; i < d.keepers; i++) {
+      if (d.stats) this.stats = d.stats
+      // older saves stored just a keeper count
+      const saved: { n?: string; l?: Keeper['levels']; f?: number }[] =
+        typeof d.keepers === 'number' ? Array.from({ length: d.keepers }, () => ({})) : d.keepers
+      for (const s of saved) {
         const k = new Keeper()
+        if (s.n) k.name = s.n
+        if (s.l) k.levels = { speed: s.l.speed ?? 0, skill: s.l.skill ?? 0 }
+        k.fed = s.f ?? 0
+        k.applyUpgrades()
         this.keepers.push(k)
         this.root.add(k.group)
       }

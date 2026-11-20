@@ -1,5 +1,18 @@
 import * as THREE from 'three'
-import { ENTRANCE, toWorld, toTile } from '../config'
+import { ENTRANCE, toWorld, toTile, KEEPER_WAGE, WAGE_PER_LEVEL, type UpgradeKind } from '../config'
+
+const KEEPER_NAMES = [
+  'Sam',
+  'Robin',
+  'Alex',
+  'Casey',
+  'Jordan',
+  'Riley',
+  'Morgan',
+  'Taylor',
+  'Quinn',
+  'Avery',
+]
 import { SPECIES } from '../data/species'
 import { personModel, mat } from './models'
 import type { Animal } from './animal'
@@ -10,6 +23,8 @@ abstract class Walker {
   path: { x: number; y: number }[] = []
   /** True while walking; drives the leg animation. */
   moving = false
+  /** Temporary speed factor (guests hurry in the rain). */
+  speedMul = 1
   /** Unit heading while moving; used to let walkers sidestep each other. */
   hx = 0
   hz = 0
@@ -36,7 +51,7 @@ abstract class Walker {
     const dx = x - p.x
     const dz = z - p.z
     const d = Math.hypot(dx, dz)
-    const s = this.speed * dt
+    const s = this.speed * this.speedMul * dt
     if (d <= s) {
       p.x = x
       p.z = z
@@ -113,6 +128,7 @@ export class Visitor extends Walker {
   sawHappy = 0
   scenery = 0
   ateFood = false
+  rained = false
   /** Price complaints (review tags) and whether they thought the visit was good value. */
   gripes = new Set<string>()
   valued = false
@@ -168,8 +184,26 @@ export class Keeper extends Walker {
   /** Gate tile of the pen being worked in; keepers pass through it on the way in and out. */
   gate: { x: number; y: number } | null = null
   timer = 0
+  name = KEEPER_NAMES[(Math.random() * KEEPER_NAMES.length) | 0]
+  /** Upgrade levels bought for this keeper, and how many animals they've fed. */
+  levels: Record<UpgradeKind, number> = { speed: 0, skill: 0 }
+  fed = 0
   constructor() {
     super(personModel(0x2a5db0, true), 2.2)
     this.group.position.set(toWorld(ENTRANCE.x), 0, toWorld(ENTRANCE.y))
+  }
+  /** Re-derive speed from upgrade levels. */
+  applyUpgrades() {
+    this.speed = 2.2 * (1 + 0.25 * this.levels.speed)
+  }
+  /** Hunger level at which this keeper starts to feed an animal: trained keepers don't wait as long. */
+  get feedAt() {
+    return 45 - 10 * this.levels.skill
+  }
+  get feedTime() {
+    return 1.4 - 0.25 * this.levels.skill
+  }
+  get wage() {
+    return Math.round(KEEPER_WAGE * (1 + WAGE_PER_LEVEL * (this.levels.speed + this.levels.skill)))
   }
 }

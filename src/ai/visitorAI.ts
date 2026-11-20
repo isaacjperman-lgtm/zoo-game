@@ -14,7 +14,7 @@ const QUEUE_SPACING = 0.55
 export function updateVisitors(g: Game, dt: number) {
   g.spawnTimer -= dt
   if (g.spawnTimer <= 0 && g.isDay) {
-    g.spawnTimer = Math.max(2, 14 - g.rating / 9) / g.demand // dearer tickets mean fewer guests
+    g.spawnTimer = Math.max(2, 14 - g.rating / 9) / (g.demand * g.weatherDemand) // dearer tickets and rain mean fewer guests
     if (g.animals.length && g.hasViewingSpots()) {
       const v = new Visitor()
       g.visitors.push(v)
@@ -27,8 +27,9 @@ export function updateVisitors(g: Game, dt: number) {
 
 function updateVisitor(g: Game, v: Visitor, dt: number) {
   v.moving = false
+  v.speedMul = g.weather === 'rain' ? 1.25 : 1
   if (v.state !== 'queue' && v.state !== 'register' && v.state !== 'leaving') {
-    v.food += 2 * dt
+    v.food += 2 * dt * (g.weather === 'sunny' ? 1.5 : 1) // hot days make people hungry
     v.bladder += 2 * dt
   }
   switch (v.state) {
@@ -57,6 +58,11 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
         // the ticket is paid for the moment they reach the booth, not when they leave
         g.earn(Math.round(g.ticketPrice * v.ticketFactor), v.group.position.x, v.group.position.z)
         g.totalVisitors++
+        g.stats.todayGuests++
+        if (g.weather === 'rain') {
+          v.rained = true
+          v.stops = Math.max(1, v.stops - 1) // they cut the visit short
+        }
         if (v.priceSensitive) judgePrice(v, g.ticketPrice, g.fair.ticket, 'Overpriced tickets', 25, 0.6)
         if (v.kind === 'teacher') {
           const kids = (v.party?.length ?? 1) - 1

@@ -42,6 +42,7 @@ export function writeReview(g: Game, v: Visitor): Review {
   }
   for (const t of v.gripes) bad.push({ text: gripeText[t] ?? t, weight: 4.5, tag: t })
   if (v.valued && !v.gripes.size) good.push({ text: 'Great value for money', weight: 3 })
+  if (v.rained && v.visited.size < 3) bad.push({ text: 'Got rained on', weight: 1 })
   if (v.sawSad > 0)
     bad.push({ text: 'Some animals looked miserable', weight: 3 + v.sawSad, tag: 'Unhappy animals' })
   if (v.visited.size <= 1 && v.satisfaction < 70)

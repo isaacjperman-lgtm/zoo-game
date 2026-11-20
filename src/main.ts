@@ -10,6 +10,8 @@ import { createHud } from './ui/hud'
 import { makeThumbnails } from './ui/thumbs'
 import { sound } from './ui/sound'
 import { lampMat } from './entities/props'
+import type { Animal } from './entities/animal'
+import type { Keeper } from './entities/people'
 
 const game = new Game()
 if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game // for debugging in the console
@@ -29,6 +31,7 @@ const scene = new THREE.Scene()
 scene.fog = new THREE.Fog(0xb4d8f0, 70, 260)
 scene.add(game.root)
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1500)
+if (import.meta.env.DEV) (window as unknown as { camera: THREE.Camera }).camera = camera // for debugging in the console
 camera.position.set(0, 24, 42)
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.mouseButtons = {
@@ -230,11 +233,13 @@ let down = false,
   lastX = 0,
   lastY = 0,
   hoverTile: { x: number; y: number } | null = null
+const ground = new THREE.Vector3() // where the last pick hit the ground
 function pick(e: PointerEvent) {
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1)
   ray.setFromCamera(mouse, camera)
   const p = new THREE.Vector3()
   if (!ray.ray.intersectPlane(plane, p)) return null
+  ground.copy(p)
   const x = toTile(p.x),
     y = toTile(p.z)
   return inBounds(x, y) ? { x, y } : null
@@ -255,17 +260,28 @@ function use(t: { x: number; y: number }, drag: boolean) {
     )
 }
 const cv = renderer.domElement
-/** The animal under the pointer: a hit on its model, or failing that the one standing on that tile. */
-function animalAt(t: { x: number; y: number } | null) {
+/** The animal or keeper under the pointer: a hit on a model, or failing that the animal on that tile. */
+function entityAt(t: { x: number; y: number } | null): Animal | Keeper | null {
   const hit = ray.intersectObjects(
-    game.animals.map((a) => a.group),
+    [...game.animals.map((a) => a.group), ...game.keepers.map((k) => k.group)],
     true,
   )[0]
   if (hit)
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
-      const a = game.animals.find((an) => an.group === o)
-      if (a) return a
+      const found = game.animals.find((an) => an.group === o) ?? game.keepers.find((k) => k.group === o)
+      if (found) return found
     }
+  // people are thin, so also accept anyone standing close to where the pointer hit the ground
+  let best: Animal | Keeper | null = null
+  let bestD = 0.6
+  for (const e of [...game.keepers, ...game.animals]) {
+    const d = Math.hypot(e.group.position.x - ground.x, e.group.position.z - ground.z)
+    if (d < bestD) {
+      best = e
+      bestD = d
+    }
+  }
+  if (best) return best
   return t ? (game.animals.find((an) => an.tx === t.x && an.ty === t.y) ?? null) : null
 }
 let rightDown: { x: number; y: number } | null = null
@@ -282,7 +298,7 @@ cv.addEventListener('pointerup', (e) => {
   rightDown = null
   if (moved > 5) return // it was an orbit drag
   const t = pick(e)
-  hud.select(animalAt(t)) // right-click an animal to inspect it, anywhere else to let go
+  hud.select(entityAt(t)) // right-click an animal or keeper to inspect it, anywhere else to let go
 })
 addEventListener('pointerup', () => (down = false))
 cv.addEventListener('pointermove', (e) => {
@@ -299,7 +315,7 @@ addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase())
   if (e.key === 'Escape') {
     hud.tool = ''
-    hud.select(null)
+    hud.escape()
   } else if (e.key === ' ') {
     speed = speed === 0 ? 1 : 0
     e.preventDefault()
@@ -318,26 +334,68 @@ let saveT = 0
 const sunDir = new THREE.Vector3(),
   fwd = new THREE.Vector3(),
   up = new THREE.Vector3(0, 1, 0)
+// ---------- weather ----------
+const RAIN = 3200
+const rainPos = new Float32Array(RAIN * 6)
+const rainBase = new Float32Array(RAIN * 3)
+for (let i = 0; i < RAIN; i++) {
+  rainBase[i * 3] = (Math.random() - 0.5) * 44
+  rainBase[i * 3 + 1] = Math.random() * 22
+  rainBase[i * 3 + 2] = (Math.random() - 0.5) * 44
+}
+const rainGeo = new THREE.BufferGeometry()
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3))
+const rainMat = new THREE.LineBasicMaterial({
+  color: 0xbcd0e6,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+})
+const rain = new THREE.LineSegments(rainGeo, rainMat)
+rain.frustumCulled = false
+scene.add(rain)
+let overcast = 0, // 0 clear .. ~0.9 downpour, eased so weather fades in and out
+  rainK = 0
+const stormGrey = new THREE.Color()
+function updateWeather(dt: number) {
+  const w = game.weather
+  overcast += ((w === 'sunny' ? 0 : w === 'cloudy' ? 0.45 : 0.9) - overcast) * Math.min(1, dt * 0.7)
+  rainK += ((w === 'rain' ? 1 : 0) - rainK) * Math.min(1, dt * 0.9)
+  rain.visible = rainK > 0.02
+  if (!rain.visible) return
+  rainMat.opacity = rainK * 0.75
+  rain.position.set(controls.target.x, 0, controls.target.z)
+  for (let i = 0; i < RAIN; i++) {
+    let y = rainBase[i * 3 + 1] - 30 * dt
+    if (y < 0) y += 22
+    rainBase[i * 3 + 1] = y
+    const x = rainBase[i * 3],
+      z = rainBase[i * 3 + 2]
+    rainPos.set([x, y, z, x - 0.08, y + 0.9, z], i * 6)
+  }
+  rainGeo.attributes.position.needsUpdate = true
+}
+
 // Selecting an animal glides the camera in and keeps it centered until the player pans away.
 let followed: unknown = null,
   zoomLeft = 0
 const focus = new THREE.Vector3(),
   rel = new THREE.Vector3()
 function followSelected(dt: number) {
-  const a = hud.selected
-  if (a !== followed) {
-    followed = a
+  const a = hud.focus
+  if (a?.group !== followed) {
+    followed = a?.group
     zoomLeft = a ? 1.4 : 0
   }
   if (!a) return
   focus.copy(a.group.position)
-  focus.y += a.species.size * 0.9
+  focus.y += a.size * 0.9
   const k = 1 - Math.exp(-dt * 6)
   rel.copy(camera.position).sub(controls.target)
   controls.target.lerp(focus, k)
   if (zoomLeft > 0) {
     zoomLeft -= dt
-    const want = 4 + a.species.size * 6 + a.species.neck * 3
+    const want = 4 + a.size * 6 + a.neck * 3
     rel.setLength(THREE.MathUtils.lerp(rel.length(), want, k))
   }
   camera.position.copy(controls.target).add(rel)
@@ -379,7 +437,14 @@ function frame() {
   lampMat.emissiveIntensity = (1 - dayK) * 3
   hemi.intensity = 0.7 - dayK * 0.2
   hemi.color.setHSL(0.58, 0.6, 0.6 + dayK * 0.3)
-  env.update(real, elev, sunDir, camera.position)
+  updateWeather(real)
+  sun.intensity *= 1 - 0.55 * overcast
+  hemi.intensity *= 1 - 0.1 * overcast
+  env.update(real, elev, sunDir, camera.position, overcast)
+  if (scene.fog) {
+    const l = (scene.fog.color.r + scene.fog.color.g + scene.fog.color.b) / 3
+    scene.fog.color.lerp(stormGrey.setRGB(l, l, l), overcast * 0.5)
+  }
 
   // animation
   for (const an of game.animals) animateRig(an.group, t + an.tx, !!an.target, real)

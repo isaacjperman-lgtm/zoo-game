@@ -824,3 +824,258 @@ button.danger:hover {
 .pdemand {
   margin-top: 14px;
 }
+
+.kcard .ups-title {
+  margin: 14px 0 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.up {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.up .status {
+  margin: 1px 0 3px;
+}
+.pips {
+  color: var(--gold);
+  letter-spacing: 2px;
+  font-size: 11px;
+}
+.upbtn {
+  min-width: 64px;
+  padding: 7px 10px;
+  font: inherit;
+  font-weight: 800;
+  color: #fff;
+  background: #3d8b4f;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.upbtn:hover:not(:disabled) {
+  background: #4aa05f;
+}
+.upbtn.poor {
+  background: #6b4a47;
+}
+.upbtn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  cursor: default;
+}
+
+/* ---- stats screen ---- */
+.smodal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 10, 8, 0.55);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.smodal.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* .panel switches pointer events back on, so the hidden dialog must be switched off explicitly */
+.smodal .spanel {
+  pointer-events: none;
+}
+.smodal.on .spanel {
+  pointer-events: auto;
+}
+.spanel {
+  position: relative;
+  width: min(860px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+.spanel .close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 22px;
+  cursor: pointer;
+}
+.shead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding-right: 30px;
+}
+.shead h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.tbtn {
+  margin-left: auto;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.tile {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+.tile .lbl {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tile b {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.card2 {
+  padding: 10px 12px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.card2 header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.card2 h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.card2 header span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.plot {
+  position: relative;
+  min-height: 150px;
+}
+.plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.plot .gl {
+  stroke: rgba(255, 255, 255, 0.09);
+  stroke-width: 1;
+}
+.plot .tk {
+  fill: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.plot .ring {
+  stroke: #111815;
+  stroke-width: 2;
+}
+.plot .ch {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1;
+  opacity: 0;
+}
+.plot .hd {
+  opacity: 0;
+}
+.plot .bar {
+  transition: filter 0.1s;
+}
+.plot .bar.hot {
+  filter: brightness(1.3);
+}
+.plot .tt {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  padding: 5px 9px;
+  min-width: 80px;
+  background: rgba(8, 12, 10, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.plot .tt.on {
+  opacity: 1;
+}
+.plot .tt b {
+  display: block;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.plot .tt span {
+  color: var(--muted);
+}
+.plot .empty,
+.table .empty {
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+.table th {
+  color: var(--muted);
+  font-weight: 700;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  .charts {
+    grid-template-columns: 1fr;
+  }
+  .tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+}

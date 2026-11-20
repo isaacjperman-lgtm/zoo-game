@@ -5,6 +5,9 @@ import type { Animal } from '../entities/animal'
 import { SPECIES } from '../data/species'
 import { BUILDINGS } from '../data/buildings'
 import { sound } from './sound'
+import { Keeper } from '../entities/people'
+import { createStatsPanel } from './statsPanel'
+import { createKeeperCard } from './keeperCard'
 
 const svg = (b: string) =>
   `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${b}</svg>`
@@ -65,6 +68,7 @@ export function createHud(
         <button data-speed="3" title="Faster (3)">3×</button>
         <span class="divider"></span>
         <button id="b-sound" title="Sound effects"></button>
+        <button id="b-stats" title="Charts of funds, rating, guests and income">Stats</button>
         <button id="b-prices" title="Set ticket, food and gift shop prices">Prices</button>
         <button id="b-reviews" title="What guests think of the zoo">Reviews</button>
         <button id="b-save">Save</button><button id="b-reset" class="danger">New game</button>
@@ -260,9 +264,27 @@ export function createHud(
     input.select()
   }
 
+  const stats = createStatsPanel(root, game)
+  $('#b-stats').onclick = () => {
+    togglePrices(false)
+    toggleReviews(false)
+    stats.toggle()
+  }
+  const kcard = createKeeperCard(root, game, fmt)
+
   let selected: Animal | null = null
   let sellArmed = 0 // timestamp until which the next click on Sell confirms
-  function select(a: Animal | null) {
+  /** Select an animal or keeper (right-click), or pass null to let go. Only one card shows at a time. */
+  function select(e: Animal | Keeper | null) {
+    if (e instanceof Keeper) {
+      selectAnimal(null, true)
+      kcard.show(e)
+      return
+    }
+    kcard.hide()
+    selectAnimal(e)
+  }
+  function selectAnimal(a: Animal | null, quiet = false) {
     selected = a
     sellArmed = 0
     card.classList.toggle('on', !!a)
@@ -273,7 +295,7 @@ export function createHud(
     cardFacts.innerHTML = ['Pen', 'Herd', 'With us', 'Meal cost']
       .map((l) => `<dt>${l}</dt><dd></dd>`)
       .join('')
-    sound.click()
+    if (!quiet) sound.click()
   }
   cardName.oninput = () => selected && (selected.name = cardName.value)
   cardName.onblur = () => {
@@ -493,6 +515,17 @@ export function createHud(
       return selected
     },
     select,
+    /** What the camera should follow: the selected animal or keeper. */
+    get focus() {
+      if (selected) return { group: selected.group, size: selected.species.size, neck: selected.species.neck }
+      if (kcard.current) return { group: kcard.current.group, size: 0.4, neck: 0 }
+      return null
+    },
+    /** Esc: close the stats screen if it's open, otherwise let go of the selection. */
+    escape() {
+      if (stats.open) stats.close()
+      else select(null)
+    },
     /** A "+$" that rises from a screen position and fades out. */
     floatText(x: number, y: number, text: string) {
       const f = document.createElement('div')
@@ -518,6 +551,8 @@ export function createHud(
       if (selected && !game.animals.includes(selected)) select(null) // sold or lost its pen
       if (selected) updateCard(selected)
       renderReviews()
+      stats.update()
+      kcard.update()
       updatePrices()
       if (document.activeElement !== zname) set0(zname, game.zooName)
       const cg = game.currentGoal
@@ -530,7 +565,11 @@ export function createHud(
       }
       const hrs = Math.floor((game.time * 24 + 6) % 24),
         mins = Math.floor((game.time * 24 * 60) % 60)
-      set(clock, `Day ${game.day}  ·  ${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`)
+      const wIcon = { sunny: '☀️', cloudy: '⛅', rain: '🌧️' }[game.weather]
+      set(
+        clock,
+        `Day ${game.day}  ·  ${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}  ·  ${wIcon}`,
+      )
       clock.dataset.night = game.isDay ? '0' : '1'
       const m = Math.floor(game.money)
       set(money, fmt(m))

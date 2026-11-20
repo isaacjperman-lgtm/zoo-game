@@ -29,7 +29,7 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
       if (Math.hypot(t.x - p.x, t.z - p.z) < 0.6) {
         k.face(t.x, t.z)
         k.phase = 'feed'
-        k.timer = 1.4
+        k.timer = k.feedTime
         k.target!.eatTimer = 1.6
       } else k.moveTo(t.x, t.z, dt)
       break
@@ -37,6 +37,7 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
     case 'feed':
       if ((k.timer -= dt) <= 0) {
         g.feed(k.target!)
+        k.fed++
         k.target = null
         k.phase = k.exit ? 'exit' : 'idle'
       }
@@ -60,7 +61,7 @@ function pickJob(g: Game, k: Keeper) {
   if (g.tile(k.px, k.py) !== T_PATH) return null
   const b = g.bfs(k.px, k.py)
   for (const a of g.animals) {
-    if (a.hunger <= 45 || claimed.has(a) || g.money < a.species.feedCost) continue
+    if (a.hunger <= k.feedAt || claimed.has(a) || g.money < a.species.feedCost) continue
     if (!g.gateSpotsFor(a, b).length) continue // no reachable gate: keepers can't get in
     const q = a.group.position
     const score = a.hunger - Math.hypot(q.x - p.x, q.z - p.z) * 1.5

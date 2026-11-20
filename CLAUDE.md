@@ -44,6 +44,8 @@ The simulation (`Game`) has no DOM code. `main.ts` and `ui/` read its state each
 - Prices are player-set (`Game.ticketPrice`, `foodPrice`, `giftPrice`, edited in the Prices panel). Guests compare them with `Game.fair`, which grows with the rating: dear tickets lower turnout (`Game.demand`) and mood, steep food or souvenir prices make guests refuse and complain, cheap ones please them. Complaints become review tags in `ai/reviews.ts`.
 - The zoo has a name (`Game.zooName`), chosen on the title screen of a new game and editable in the top bar. It is painted on the entrance sign via `env.setSign`.
 - Rare events (`Game.rollEvents`, started with `game.startEvent('school' | 'critic')`): a school trip (teacher plus kids who pay half and follow the teacher) and a zoo critic whose verdict counts triple toward guest mood. Special visitors are `Visitor.kind`.
+- Weather (`Game.weather`: sunny, cloudy, rain) changes every 40-90 s of game time. Rain cuts turnout (`Game.weatherDemand`), makes guests hurry and cut visits short, and makes animals nap more; sun makes guests hungrier. `main.ts` draws the rain and greys the sky and light (`updateWeather`).
+- Right-click a keeper (or animal) to open its card. Keeper upgrades live in `KEEPER_UPGRADES` in `config.ts` (`Game.upgradeKeeper`), raise the keeper's daily wage, and are saved. The Stats screen (`ui/statsPanel.ts`) charts `Game.stats`, which is sampled through the day and closed out each day.
 - Clicking a tool-less action (like Hire) deselects the current tool, and Esc deselects too.
 
 ## Not yet implemented

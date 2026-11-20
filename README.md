@@ -17,6 +17,7 @@ F11 toggles full screen.
 
 ### Troubleshooting the desktop app
 
+- **A dark or empty window for a long time.** Make sure you have the current AppImage from the 1.0.0 release (about 122 MB). An earlier upload was packed too tightly and took nearly a minute to open.
 - **Nothing happens when I open it.** Only one copy can run at a time, so a copy that is stuck in the background makes
   every new launch quit silently. Stop it with `pkill zoo-keeper` (Linux) or by ending "Zoo Keeper" in Task Manager
   (Windows), then open it again.

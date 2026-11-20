@@ -8,7 +8,7 @@ files:
   - electron/**
   - build/icon.png
   - package.json
-compression: maximum
+compression: normal
 artifactName: Zoo-Keeper-${version}-${os}-${arch}.${ext}
 linux:
   target: AppImage

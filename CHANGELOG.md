@@ -109,6 +109,9 @@ builds (Linux AppImage and Windows portable `.exe`) alongside the web version.
 - Closed gates blending into the fence; they are now a cream gateway with gold caps.
 - Keepers who ended up off the paths and never moved again.
 - Kangaroos and flamingos showing the generic animal model.
+- The Linux AppImage took nearly a minute to open (it looked like a dark or empty window) because it was packed with
+  the heaviest compression, which made every file slow to unpack. It now opens in about a second. The file is larger
+  as a result (about 122 MB).
 
 ### Known limits
 

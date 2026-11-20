@@ -42,7 +42,9 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
       }
       break
     case 'exit':
-      if (!k.exit || k.moveTo(toWorld(k.exit.x), toWorld(k.exit.y), dt)) {
+      if (k.gate) {
+        if (k.moveTo(toWorld(k.gate.x), toWorld(k.gate.y), dt)) k.gate = null
+      } else if (!k.exit || k.moveTo(toWorld(k.exit.x), toWorld(k.exit.y), dt)) {
         k.exit = null
         k.phase = 'idle'
       }
@@ -55,8 +57,11 @@ function pickJob(g: Game, k: Keeper) {
   const p = k.group.position
   let best = null
   let bestScore = -Infinity
+  if (g.tile(k.px, k.py) !== T_PATH) return null
+  const b = g.bfs(k.px, k.py)
   for (const a of g.animals) {
     if (a.hunger <= 45 || claimed.has(a) || g.money < a.species.feedCost) continue
+    if (!g.gateSpotsFor(a, b).length) continue // no reachable gate: keepers can't get in
     const q = a.group.position
     const score = a.hunger - Math.hypot(q.x - p.x, q.z - p.z) * 1.5
     if (score > bestScore) {
@@ -68,15 +73,15 @@ function pickJob(g: Game, k: Keeper) {
 }
 
 function plan(g: Game, k: Keeper) {
-  if (g.tile(k.px, k.py) === T_PATH) {
-    const b = g.bfs(k.px, k.py)
-    const spots = g.spotsFor(k.target!, b).sort((p, q) => p.d - q.d)
-    if (spots.length) {
-      k.path = g.pathTo(b, spots[0].x, spots[0].y)
-      k.exit = { x: spots[0].x, y: spots[0].y }
-      k.phase = 'walk'
-      return
-    }
+  const b = g.bfs(k.px, k.py)
+  const spot = g.gateSpotsFor(k.target!, b).sort((p, q) => p.d - q.d)[0]
+  if (!spot) {
+    k.target = null
+    k.phase = 'idle'
+    return
   }
-  k.phase = 'enter' // no connected path: walk straight there
+  k.path = [...g.pathTo(b, spot.x, spot.y), { x: spot.gx, y: spot.gy }]
+  k.exit = { x: spot.x, y: spot.y }
+  k.gate = { x: spot.gx, y: spot.gy }
+  k.phase = 'walk'
 }

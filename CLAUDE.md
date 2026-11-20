@@ -40,6 +40,7 @@ The simulation (`Game`) has no DOM code. `main.ts` and `ui/` read its state each
 - Income goes through `Game.earn` so it triggers the floating "+$" text and coin sound.
 - Animal happiness drops with hunger, a cramped pen (`Species.space`), loneliness (social species) and a predator in the pen. Animals sleep at night and nap by day.
 - Buildings go on open grass, face the nearest path, and must be cleared before building a path or pen there. Clearing refunds half. Removing a pen tile under an animal sells it for half price.
+- Enclosures get a gate automatically (`Game.autoGates`) on the pen tile nearest the entrance by path. Keepers only enter and leave through gates, and the gate doors open only while a keeper is near. There is no gate tool.
 - Clicking a tool-less action (like Hire) deselects the current tool, and Esc deselects too.
 
 ## Not yet implemented

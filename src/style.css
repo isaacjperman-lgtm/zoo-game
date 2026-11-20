@@ -513,3 +513,86 @@ button.danger:hover {
     margin-top: -42px;
   }
 }
+
+.acard {
+  position: fixed;
+  right: 16px;
+  top: 96px;
+  width: 270px;
+  padding: 14px;
+  opacity: 0;
+  transform: translateX(14px);
+  pointer-events: none;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+.acard.on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.acard .close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+.acard .name {
+  width: calc(100% - 26px);
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  background: transparent;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+}
+.acard .name:hover,
+.acard .name:focus {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+.acard .status {
+  padding-left: 8px;
+}
+.acard .facts {
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+.acard dt {
+  color: var(--muted);
+}
+.acard dd {
+  margin: 0;
+  text-align: right;
+}
+.acard .feedbtn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.acard .feedbtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+.acard .feedbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

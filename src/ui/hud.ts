@@ -22,6 +22,7 @@ const ICON = {
 const STAR =
   '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z"/></svg>'
 
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const fmt = (n: number) => '$' + Math.floor(n).toLocaleString('en-US')
 const set = (e: HTMLElement, t: string) => {
   if (e.textContent !== t) e.textContent = t
@@ -66,7 +67,7 @@ export function createHud(
     <div class="panel goal" id="goal"><div class="lbl">Goal</div><div class="g-text" id="g-text"></div><div class="meter"><i id="g-bar"></i></div><div class="g-rw" id="g-rw"></div></div>
     <div id="toast"></div><div id="tip"></div><div id="hover"></div>
     <footer class="dock panel"><nav class="tabs"></nav><div class="items"></div></footer>
-    <div class="hint" id="hint">Right-drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; WASD to pan &nbsp;·&nbsp; Space to pause</div>`
+    <div class="hint" id="hint">Right-drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; WASD to pan &nbsp;·&nbsp; Space to pause &nbsp;·&nbsp; Right-click an animal to inspect it</div>`
   const $ = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!
   const clock = $('#clock'),
     money = $('#s-money'),
@@ -79,6 +80,75 @@ export function createHud(
     hoverEl = $('#hover'),
     tabsEl = $('.tabs'),
     itemsEl = $('.items')
+
+  const card = document.createElement('aside')
+  card.className = 'panel acard'
+  card.id = 'acard'
+  card.innerHTML = `
+    <button class="close" title="Close (Esc)">×</button>
+    <input class="name" maxlength="20" spellcheck="false" aria-label="Animal name" />
+    <div class="status"><span class="sp"></span> · <span class="st"></span></div>
+    <div class="bars"></div>
+    <dl class="facts"></dl>
+    <div class="issues"></div>
+    <button class="feedbtn"></button>`
+  root.append(card)
+  const cardName = card.querySelector<HTMLInputElement>('.name')!
+  const cardBars = card.querySelector<HTMLElement>('.bars')!
+  const cardFacts = card.querySelector<HTMLElement>('.facts')!
+  const cardIssues = card.querySelector<HTMLElement>('.issues')!
+  const cardFeed = card.querySelector<HTMLButtonElement>('.feedbtn')!
+  let selected: Animal | null = null
+  function select(a: Animal | null) {
+    selected = a
+    card.classList.toggle('on', !!a)
+    if (!a) return
+    cardName.value = a.name
+    card.querySelector('.sp')!.textContent = a.species.name
+    cardBars.innerHTML = bar('Hunger', 0, 'warn') + bar('Happiness', 0, 'good')
+    cardFacts.innerHTML = ['Pen', 'Herd', 'With us', 'Meal cost']
+      .map((l) => `<dt>${l}</dt><dd></dd>`)
+      .join('')
+    sound.click()
+  }
+  cardName.oninput = () => selected && (selected.name = cardName.value)
+  cardName.onblur = () => {
+    if (!selected) return
+    selected.name = cardName.value.trim() || selected.species.name
+    cardName.value = selected.name
+  }
+  cardName.onkeydown = (e) => {
+    e.stopPropagation() // typing a name must not trigger camera or speed hotkeys
+    if (e.key === 'Enter' || e.key === 'Escape') cardName.blur()
+  }
+  card.querySelector<HTMLElement>('.close')!.onclick = () => select(null)
+  cardFeed.onclick = () => selected && game.feed(selected)
+  function updateCard(a: Animal) {
+    const reg = game.region(a.tx, a.ty)
+    const mates = game.animals.filter((o) => reg.some((r) => r[0] === o.tx && r[1] === o.ty))
+    const same = mates.filter((o) => o.species === a.species).length
+    set(card.querySelector<HTMLElement>('.st')!, a.status[0].toUpperCase() + a.status.slice(1))
+    const fills = cardBars.querySelectorAll<HTMLElement>('i')
+    const setBar = (i: HTMLElement, v: number, cls: string) => {
+      i.className = cls
+      i.style.width = Math.round(v) + '%'
+    }
+    setBar(fills[0], a.hunger, a.hunger > 60 ? 'bad' : 'warn')
+    setBar(fills[1], a.happiness, a.happiness < 40 ? 'bad' : 'good')
+    const dd = cardFacts.querySelectorAll('dd')
+    const days = Math.max(0, game.day - a.arrived)
+    set(dd[0] as HTMLElement, `${reg.length} tiles (wants ${a.species.space * same})`)
+    set(
+      dd[1] as HTMLElement,
+      `${same} ${a.species.name.toLowerCase()}${same === 1 ? '' : 's'}, ${mates.length} in pen`,
+    )
+    set(dd[2] as HTMLElement, days === 0 ? 'Arrived today' : `${days} day${days === 1 ? '' : 's'}`)
+    set(dd[3] as HTMLElement, fmt(a.species.feedCost))
+    set(cardIssues, a.issues.join(' · '))
+    cardIssues.style.display = a.issues.length ? '' : 'none'
+    set(cardFeed, a.hunger > 5 ? `Feed ${a.name} (${fmt(a.species.feedCost)})` : `${a.name} is full`)
+    cardFeed.disabled = a.hunger <= 5
+  }
 
   let tool = 'path',
     tab = 'Build',
@@ -101,7 +171,7 @@ export function createHud(
           name: 'Enclosure',
           price: COSTS.pen,
           icon: ICON.pen,
-          tip: 'Fenced ground for animals. Bigger pens keep animals happier.',
+          tip: 'Fenced ground for animals. Bigger pens keep animals happier. A gate appears where it meets a path.',
         },
         {
           id: 'clear',
@@ -243,6 +313,10 @@ export function createHud(
       syncActive()
     },
     toast,
+    get selected() {
+      return selected
+    },
+    select,
     /** A "+$" that rises from a screen position and fades out. */
     floatText(x: number, y: number, text: string) {
       const f = document.createElement('div')
@@ -258,13 +332,15 @@ export function createHud(
         hoverEl.classList.remove('on')
         return
       }
-      hoverEl.innerHTML = `<b>${a.species.name}</b><div class="status">${a.status[0].toUpperCase() + a.status.slice(1)}</div>${bar('Hunger', a.hunger, a.hunger > 60 ? 'bad' : 'warn')}${bar('Happiness', a.happiness, a.happiness < 40 ? 'bad' : 'good')}${a.issues.length ? `<div class="issues">${a.issues.join(' · ')}</div>` : ''}`
+      hoverEl.innerHTML = `<b>${esc(a.name)}</b><div class="status">${a.species.name} · ${a.status[0].toUpperCase() + a.status.slice(1)}</div>${bar('Hunger', a.hunger, a.hunger > 60 ? 'bad' : 'warn')}${bar('Happiness', a.happiness, a.happiness < 40 ? 'bad' : 'good')}${a.issues.length ? `<div class="issues">${a.issues.join(' · ')}</div>` : ''}`
       hoverEl.style.left = x + 16 + 'px'
       hoverEl.style.top = y + 16 + 'px'
       hoverEl.classList.add('on')
     },
     update(spd: number) {
       speed = spd
+      if (selected && !game.animals.includes(selected)) select(null) // sold or lost its pen
+      if (selected) updateCard(selected)
       const cg = game.currentGoal
       goalEl.style.display = cg ? '' : 'none'
       if (cg) {

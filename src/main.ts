@@ -68,6 +68,11 @@ const railMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.04, 0.04), p
 const postMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.5, 0.07), penMat, N * N * 8)
 railMesh.castShadow = postMesh.castShadow = true
 scene.add(railMesh, postMesh)
+const gateGroup = new THREE.Group()
+scene.add(gateGroup)
+const gateWood = new THREE.MeshStandardMaterial({ color: 0xc89a5a, roughness: 0.7 })
+const gatePostGeo = new THREE.BoxGeometry(0.1, 0.62, 0.1)
+const gateLeafGeo = new THREE.BoxGeometry(0.4, 0.3, 0.035)
 
 const col = new THREE.Color(),
   dummy = new THREE.Object3D()
@@ -75,9 +80,53 @@ const noise = (x: number, y: number) => {
   const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
   return s - Math.floor(s)
 }
+/** A closed gate on a tile edge: two posts with a door leaf hinged on each. Leaves swing into the pen to open. */
+interface GateRig {
+  x: number
+  z: number
+  open: number // 0 closed .. 1 open
+  left: THREE.Object3D
+  right: THREE.Object3D
+}
+const gates: GateRig[] = []
+function addGate(cx: number, cz: number, dx: number, dy: number) {
+  const g = new THREE.Group()
+  g.position.set(cx, 0, cz)
+  g.rotation.y = Math.atan2(dx, dy) // local +z points out toward the path
+  const hinges: THREE.Group[] = []
+  for (const e of [-1, 1]) {
+    const post = new THREE.Mesh(gatePostGeo, penMat)
+    post.position.set(e * 0.5, 0.31, 0)
+    post.castShadow = true
+    const hinge = new THREE.Group()
+    hinge.position.set(e * 0.45, 0.27, 0)
+    const leaf = new THREE.Mesh(gateLeafGeo, gateWood)
+    leaf.position.set(-e * 0.2, 0, 0)
+    leaf.castShadow = true
+    hinge.add(leaf)
+    g.add(post, hinge)
+    hinges.push(hinge)
+  }
+  gateGroup.add(g)
+  gates.push({ x: cx, z: cz, open: 0, left: hinges[0], right: hinges[1] })
+}
+/** Gates stay shut until a keeper walks up to one, swing open for them, then close behind them. */
+function animateGates(dt: number) {
+  for (const gt of gates) {
+    const near = game.keepers.some(
+      (k) => Math.hypot(k.group.position.x - gt.x, k.group.position.z - gt.z) < 1.1,
+    )
+    gt.open += ((near ? 1 : 0) - gt.open) * Math.min(1, dt * 8)
+    const ang = gt.open * 1.5
+    gt.left.rotation.y = ang
+    gt.right.rotation.y = -ang
+  }
+}
 function rebuildTiles() {
   let nr = 0,
     np = 0
+  gateGroup.clear()
+  gates.length = 0
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++) {
       const t = game.tile(x, y),
@@ -90,7 +139,8 @@ function rebuildTiles() {
       dummy.updateMatrix()
       tileMesh.setMatrixAt(i, dummy.matrix)
       if (paved) col.setHSL(0.11, 0.3, 0.5 + n * 0.07)
-      else if (t === T_PEN) col.setHSL(0.09, 0.4, 0.36 + n * 0.05)
+      else if (t === T_PEN)
+        col.setHSL(0.09, game.gates.has(i) ? 0.3 : 0.4, (game.gates.has(i) ? 0.5 : 0.36) + n * 0.05)
       else col.setHSL(0.27 + n * 0.02, 0.5, 0.25 + n * 0.04 + ((x + y) & 1) * 0.02)
       tileMesh.setColorAt(i, col)
       if (t !== T_PEN) continue
@@ -101,6 +151,10 @@ function rebuildTiles() {
         [0, -1],
       ]) {
         if (game.tile(x + dx, y + dy) === T_PEN) continue
+        if (game.gates.has(i) && game.tile(x + dx, y + dy) === T_PATH) {
+          addGate(toWorld(x) + dx * 0.49, toWorld(y) + dy * 0.49, dx, dy)
+          continue
+        }
         const cx = toWorld(x) + dx * 0.49,
           cz = toWorld(y) + dy * 0.49
         for (const h of [0.17, 0.36]) {
@@ -194,11 +248,34 @@ function use(t: { x: number; y: number }, drag: boolean) {
     )
 }
 const cv = renderer.domElement
+/** The animal under the pointer: a hit on its model, or failing that the one standing on that tile. */
+function animalAt(t: { x: number; y: number } | null) {
+  const hit = ray.intersectObjects(
+    game.animals.map((a) => a.group),
+    true,
+  )[0]
+  if (hit)
+    for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
+      const a = game.animals.find((an) => an.group === o)
+      if (a) return a
+    }
+  return t ? (game.animals.find((an) => an.tx === t.x && an.ty === t.y) ?? null) : null
+}
+let rightDown: { x: number; y: number } | null = null
 cv.addEventListener('pointerdown', (e) => {
+  if (e.button === 2) rightDown = { x: e.clientX, y: e.clientY } // a right click inspects; a right drag orbits
   if (e.button !== 0) return
   down = true
   const t = pick(e)
   if (t) use(t, false)
+})
+cv.addEventListener('pointerup', (e) => {
+  if (e.button !== 2 || !rightDown) return
+  const moved = Math.hypot(e.clientX - rightDown.x, e.clientY - rightDown.y)
+  rightDown = null
+  if (moved > 5) return // it was an orbit drag
+  const t = pick(e)
+  hud.select(animalAt(t)) // right-click an animal to inspect it, anywhere else to let go
 })
 addEventListener('pointerup', () => (down = false))
 cv.addEventListener('pointermove', (e) => {
@@ -211,9 +288,12 @@ cv.addEventListener('pointerleave', () => (hoverTile = null))
 cv.addEventListener('contextmenu', (e) => e.preventDefault())
 const keys = new Set<string>()
 addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return // typing in a text field
   keys.add(e.key.toLowerCase())
-  if (e.key === 'Escape') hud.tool = ''
-  else if (e.key === ' ') {
+  if (e.key === 'Escape') {
+    hud.tool = ''
+    hud.select(null)
+  } else if (e.key === ' ') {
     speed = speed === 0 ? 1 : 0
     e.preventDefault()
   } else if ('123'.includes(e.key) && e.key) speed = +e.key
@@ -231,10 +311,35 @@ let saveT = 0
 const sunDir = new THREE.Vector3(),
   fwd = new THREE.Vector3(),
   up = new THREE.Vector3(0, 1, 0)
+// Selecting an animal glides the camera in and keeps it centered until the player pans away.
+let followed: unknown = null,
+  zoomLeft = 0
+const focus = new THREE.Vector3(),
+  rel = new THREE.Vector3()
+function followSelected(dt: number) {
+  const a = hud.selected
+  if (a !== followed) {
+    followed = a
+    zoomLeft = a ? 1.4 : 0
+  }
+  if (!a) return
+  focus.copy(a.group.position)
+  focus.y += a.species.size * 0.9
+  const k = 1 - Math.exp(-dt * 6)
+  rel.copy(camera.position).sub(controls.target)
+  controls.target.lerp(focus, k)
+  if (zoomLeft > 0) {
+    zoomLeft -= dt
+    const want = 4 + a.species.size * 6 + a.species.neck * 3
+    rel.setLength(THREE.MathUtils.lerp(rel.length(), want, k))
+  }
+  camera.position.copy(controls.target).add(rel)
+}
 function frame() {
   const real = Math.min(clock.getDelta(), 0.1),
     t = clock.elapsedTime
   game.update(real * speed)
+  animateGates(real)
 
   // camera pan
   const mx = +(keys.has('d') || keys.has('arrowright')) - +(keys.has('a') || keys.has('arrowleft'))
@@ -250,7 +355,9 @@ function frame() {
       .multiplyScalar(22 * real)
     camera.position.add(d)
     controls.target.add(d)
+    hud.select(null) // panning away lets go of the animal
   }
+  followSelected(real)
   controls.update()
 
   // sun cycle
@@ -284,7 +391,7 @@ function frame() {
   const over = hoverTile
     ? (game.animals.find((an) => an.tx === hoverTile!.x && an.ty === hoverTile!.y) ?? null)
     : null
-  hud.showAnimal(over, lastX, lastY)
+  hud.showAnimal(over === hud.selected ? null : over, lastX, lastY)
   hud.update(speed)
 
   if ((saveT += real) > 10) {

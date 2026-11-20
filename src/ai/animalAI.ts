@@ -28,6 +28,7 @@ export function updateAnimal(g: Game, a: Animal, dt: number) {
   if (crowded > 5) a.issues.push('Crowded')
   if (lonely) a.issues.push('Lonely')
   if (stressed) a.issues.push('Scared of predator')
+  if (!g.hasGate(reg)) a.issues.push('No gate for keepers')
 
   // pose: lie down a little while resting
   const ty = a.status === 'sleeping' || a.status === 'resting' ? 0.8 : 1

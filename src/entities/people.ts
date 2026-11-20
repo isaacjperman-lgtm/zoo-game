@@ -10,6 +10,14 @@ abstract class Walker {
   path: { x: number; y: number }[] = []
   /** True while walking; drives the leg animation. */
   moving = false
+  /** Unit heading while moving; used to let walkers sidestep each other. */
+  hx = 0
+  hz = 0
+  /** How far right of the path's center line this walker keeps, so people going opposite ways pass cleanly. */
+  keep = 0.15 + Math.random() * 0.07
+  private segPath: unknown = null
+  private segX = 0
+  private segY = 0
   constructor(
     group: THREE.Group,
     public speed: number,
@@ -35,8 +43,10 @@ abstract class Walker {
       this.moving = false
       return true
     }
-    p.x += (dx / d) * s
-    p.z += (dz / d) * s
+    this.hx = dx / d
+    this.hz = dz / d
+    p.x += this.hx * s
+    p.z += this.hz * s
     this.group.rotation.y = Math.atan2(dx, dz)
     this.moving = true
     return false
@@ -45,14 +55,29 @@ abstract class Walker {
     const p = this.group.position
     this.group.rotation.y = Math.atan2(x - p.x, z - p.z)
   }
-  /** Follow the tile path. Returns true when finished. */
+  /** Follow the tile path, keeping to the right-hand side. Returns true when finished. */
   step(dt: number) {
     if (!this.path.length) {
       this.moving = false
       return true
     }
+    if (this.segPath !== this.path) {
+      // new route: the first segment starts from the tile we're standing on
+      this.segPath = this.path
+      this.segX = this.px
+      this.segY = this.py
+    }
     const n = this.path[0]
-    if (this.moveTo(toWorld(n.x), toWorld(n.y), dt)) this.path.shift()
+    const dx = Math.sign(n.x - this.segX)
+    const dy = Math.sign(n.y - this.segY)
+    // right-hand side of the direction of travel (x east, z south)
+    const ox = -dy * this.keep
+    const oz = dx * this.keep
+    if (this.moveTo(toWorld(n.x) + ox, toWorld(n.y) + oz, dt)) {
+      this.segX = n.x
+      this.segY = n.y
+      this.path.shift()
+    }
     this.moving = this.path.length > 0
     return this.path.length === 0
   }
@@ -94,6 +119,8 @@ export class Keeper extends Walker {
   target: Animal | null = null
   /** Path tile beside the pen the keeper stepped in from, and returns to. */
   exit: { x: number; y: number } | null = null
+  /** Gate tile of the pen being worked in; keepers pass through it on the way in and out. */
+  gate: { x: number; y: number } | null = null
   timer = 0
   constructor() {
     super(personModel(0x2a5db0, true), 2.2)

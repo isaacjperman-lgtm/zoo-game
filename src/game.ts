@@ -49,6 +49,8 @@ export class Game {
   keepers: Keeper[] = []
   root = new THREE.Group()
   props = new Map<number, Prop>() // buildings and decorations, keyed by tile index
+  /** Enclosure tiles with a gate. Keepers can only enter or leave a pen through a gate beside a path. */
+  gates = new Set<number>()
   goalIndex = 0
   private goalTimer = 0
   queue: Visitor[] = [] // guests waiting for tickets, first in line first
@@ -102,10 +104,33 @@ export class Game {
     this.money -= cost
     this.tiles[idx(x, y)] = type
     this.regionCache.clear()
-    if (cur === T_PEN) this.revalidateAnimals()
+    if (cur === T_PEN) {
+      this.gates.delete(idx(x, y))
+      this.revalidateAnimals()
+    }
     this.orientProps()
+    this.autoGates()
     this.onSound('build')
     this.onTilesChanged()
+  }
+
+  // ---- gates (added automatically where an enclosure meets a path) ----
+  /** True if some tile of this pen has a gate. */
+  hasGate(reg: number[][]) {
+    return reg.some(([x, y]) => this.gates.has(idx(x, y)))
+  }
+  /** Gate openings of an animal's pen that a keeper can reach: the path tile outside and the gate tile inside. */
+  gateSpotsFor(a: Animal, b: Bfs) {
+    const out: { x: number; y: number; d: number; gx: number; gy: number }[] = []
+    for (const [gx, gy] of this.region(a.tx, a.ty)) {
+      if (!this.gates.has(idx(gx, gy))) continue
+      for (const [dx, dy] of DIRS) {
+        const x = gx + dx
+        const y = gy + dy
+        if (this.tile(x, y) === T_PATH && reachable(b, x, y)) out.push({ x, y, d: b.dist[idx(x, y)], gx, gy })
+      }
+    }
+    return out
   }
 
   // ---- buildings and decorations ----
@@ -241,6 +266,7 @@ export class Game {
     this.money -= sp.cost
     this.onSound('build')
     const a = new Animal(sp, x, y)
+    a.arrived = this.day
     this.animals.push(a)
     this.root.add(a.group)
   }
@@ -336,8 +362,16 @@ export class Game {
         money: this.money,
         day: this.day,
         time: this.time,
-        animals: this.animals.map((a) => ({ s: a.species.id, x: a.tx, y: a.ty, h: a.hunger })),
+        animals: this.animals.map((a) => ({
+          s: a.species.id,
+          x: a.tx,
+          y: a.ty,
+          h: a.hunger,
+          n: a.name,
+          d: a.arrived,
+        })),
         keepers: this.keepers.length,
+        gates: [...this.gates],
         props: [...this.props.values()].map((p) => ({ id: p.id, x: p.x, y: p.y })),
         goal: this.goalIndex,
         guests: this.totalVisitors,
@@ -352,6 +386,7 @@ export class Game {
       const d = JSON.parse(raw)
       this.tiles.set(d.tiles)
       this.regionCache.clear()
+      for (const i of d.gates ?? []) this.gates.add(i)
       this.ensureFixedTiles()
       this.money = d.money
       this.day = d.day
@@ -361,11 +396,14 @@ export class Game {
       this.guestMood = d.mood ?? 70
       for (const p of d.props ?? []) this.addProp(p.id, p.x, p.y)
       this.orientProps()
+      if (!d.gates) this.autoGates() // old saves predate gates
       for (const a of d.animals) {
         const sp = SPECIES.find((s) => s.id === a.s)
         if (!sp) continue
         const an = new Animal(sp, a.x, a.y)
         an.hunger = a.h
+        if (a.n) an.name = a.n
+        an.arrived = a.d ?? this.day
         this.animals.push(an)
         this.root.add(an.group)
       }
@@ -378,6 +416,42 @@ export class Game {
     } catch {
       return false
     }
+  }
+  /**
+   * Give every enclosure that has no gate one, on the tile whose neighboring path is closest to the entrance.
+   * Runs after paths or enclosures change, so gates appear wherever a pen meets a path.
+   */
+  autoGates() {
+    const b = this.bfs(ENTRANCE.x, ENTRANCE.y)
+    const done = new Set<number>()
+    let added = false
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        if (this.tile(x, y) !== T_PEN || done.has(idx(x, y))) continue
+        const reg = this.region(x, y)
+        for (const [rx, ry] of reg) done.add(idx(rx, ry))
+        // a gate whose path was removed is dead weight: drop it so a new one can be placed
+        for (const [rx, ry] of reg)
+          if (this.gates.has(idx(rx, ry)) && !DIRS.some(([dx, dy]) => this.tile(rx + dx, ry + dy) === T_PATH))
+            this.gates.delete(idx(rx, ry))
+        if (this.hasGate(reg)) continue
+        let best: number | null = null
+        let bestD = Infinity
+        for (const [rx, ry] of reg)
+          for (const [dx, dy] of DIRS) {
+            if (this.tile(rx + dx, ry + dy) !== T_PATH) continue
+            const d = reachable(b, rx + dx, ry + dy) ? b.dist[idx(rx + dx, ry + dy)] : 1e6
+            if (d < bestD) {
+              bestD = d
+              best = idx(rx, ry)
+            }
+          }
+        if (best !== null) {
+          this.gates.add(best)
+          added = true
+        }
+      }
+    if (added) this.onTilesChanged()
   }
   reset() {
     this.resetting = true // stops the unload autosave from re-creating the save

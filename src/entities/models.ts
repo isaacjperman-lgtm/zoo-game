@@ -82,8 +82,6 @@ function quadruped(s: Species) {
     bear: [0.55, 0.95, 1.5, 0.85, 0.12],
     hippo: [0.4, 1.0, 1.8, 1.05, 0.16],
     rhino: [0.5, 1.0, 1.8, 0.95, 0.15],
-    panda: [0.5, 0.95, 1.4, 0.9, 0.12],
-    monkey: [0.6, 0.7, 1.3, 0.6, 0.07],
   }
   const [dl, dbh, dbl, dbw, dlr] = dims[id] ?? [0.8, 0.8, 1.6, 0.72, 0.085]
   const legH = k * dl
@@ -269,8 +267,109 @@ function penguin(s: Species) {
   return g
 }
 
+function panda(s: Species) {
+  const g = new THREE.Group(),
+    legs: Limb[] = [],
+    k = s.size,
+    black = s.accent
+  const body = add(g, new THREE.SphereGeometry(k * 0.62, 12, 10), s.color, 0, k * 0.78, 0)
+  body.scale.set(0.95, 0.9, 1.2)
+  // black shoulder band
+  const band = add(g, new THREE.TorusGeometry(k * 0.5, k * 0.17, 6, 14), black, 0, k * 0.8, k * 0.42)
+  band.scale.set(1.05, 1.0, 1)
+  for (const [sx, sz, ph] of [
+    [1, 1, 0],
+    [-1, -1, 0],
+    [-1, 1, Math.PI],
+    [1, -1, Math.PI],
+  ]) {
+    const p = new THREE.Group()
+    p.position.set(sx * k * 0.34, k * 0.5, sz * k * 0.5)
+    add(p, new THREE.CylinderGeometry(k * 0.17, k * 0.15, k * 0.5, 8), black, 0, -k * 0.25, 0)
+    g.add(p)
+    legs.push({ o: p, phase: ph, k: 1 })
+  }
+  const h = new THREE.Group()
+  h.position.set(0, k * 1.0, k * 0.78)
+  add(h, new THREE.SphereGeometry(k * 0.4, 12, 10), s.color)
+  add(h, new THREE.SphereGeometry(k * 0.16, 8, 8), 0x2a2a2a, 0, -k * 0.08, k * 0.34).scale.set(1, 0.7, 0.9)
+  for (const sx of [-1, 1]) {
+    add(h, new THREE.SphereGeometry(k * 0.15, 8, 8), black, sx * k * 0.33, k * 0.33, -k * 0.03)
+    const patch = add(h, new THREE.SphereGeometry(k * 0.11, 8, 8), black, sx * k * 0.17, k * 0.06, k * 0.3)
+    patch.scale.set(0.8, 1.2, 0.5)
+    patch.rotation.z = sx * 0.4
+    add(h, new THREE.SphereGeometry(k * 0.03, 6, 6), 0xffffff, sx * k * 0.17, k * 0.08, k * 0.34)
+  }
+  g.add(h)
+  add(g, new THREE.SphereGeometry(k * 0.1, 6, 6), s.color, 0, k * 0.85, -k * 0.74)
+  g.userData.rig = { legs, speed: 6, amp: 0 } satisfies Rig
+  return g
+}
+
+function monkey(s: Species) {
+  const g = new THREE.Group(),
+    legs: Limb[] = [],
+    k = s.size * 1.8,
+    skin = s.accent
+  const body = add(g, new THREE.CapsuleGeometry(k * 0.2, k * 0.35, 4, 8), s.color, 0, k * 0.62, 0)
+  body.rotation.x = 0.35
+  add(g, new THREE.SphereGeometry(k * 0.16, 8, 8), skin, 0, k * 0.6, k * 0.12).scale.set(1, 1.2, 0.6)
+  for (const [sx, ph] of [
+    [1, 0],
+    [-1, Math.PI],
+  ]) {
+    // legs
+    const l = new THREE.Group()
+    l.position.set(sx * k * 0.14, k * 0.38, -k * 0.06)
+    add(l, new THREE.CylinderGeometry(k * 0.075, k * 0.06, k * 0.38, 6), s.color, 0, -k * 0.17, 0)
+    add(l, new THREE.BoxGeometry(k * 0.12, k * 0.05, k * 0.2), skin, 0, -k * 0.37, k * 0.04)
+    g.add(l)
+    legs.push({ o: l, phase: ph, k: 1 })
+    // long arms, swinging opposite the legs
+    const a = new THREE.Group()
+    a.position.set(sx * k * 0.27, k * 0.8, k * 0.1)
+    add(a, new THREE.CylinderGeometry(k * 0.06, k * 0.05, k * 0.6, 6), s.color, 0, -k * 0.28, 0)
+    add(a, new THREE.SphereGeometry(k * 0.07, 6, 6), skin, 0, -k * 0.6, 0)
+    g.add(a)
+    legs.push({ o: a, phase: ph + Math.PI, k: 1 })
+  }
+  const h = new THREE.Group()
+  h.position.set(0, k * 1.12, k * 0.2)
+  add(h, new THREE.SphereGeometry(k * 0.22, 10, 8), s.color)
+  add(h, new THREE.SphereGeometry(k * 0.16, 8, 8), skin, 0, -k * 0.04, k * 0.12).scale.set(1.1, 1, 0.8)
+  add(h, new THREE.SphereGeometry(k * 0.08, 6, 6), s.color, 0, -k * 0.1, k * 0.24).scale.set(1.2, 0.8, 0.8)
+  for (const sx of [-1, 1]) {
+    add(h, new THREE.SphereGeometry(k * 0.03, 6, 6), 0x111111, sx * k * 0.08, k * 0.04, k * 0.22)
+    add(h, new THREE.SphereGeometry(k * 0.09, 8, 8), skin, sx * k * 0.23, k * 0.02, -k * 0.02)
+  }
+  g.add(h)
+  // long curled tail
+  const tp = new THREE.Group()
+  tp.position.set(0, k * 0.5, -k * 0.2)
+  tp.rotation.x = -2.4
+  add(tp, new THREE.CylinderGeometry(k * 0.035, k * 0.03, k * 0.7, 5), s.color, 0, k * 0.35, 0)
+  const curl = add(
+    tp,
+    new THREE.TorusGeometry(k * 0.1, k * 0.03, 5, 8, Math.PI * 1.3),
+    s.color,
+    0,
+    k * 0.78,
+    k * 0.08,
+  )
+  curl.rotation.y = Math.PI / 2
+  g.add(tp)
+  g.userData.rig = { legs, speed: 9, amp: 0 } satisfies Rig
+  return g
+}
+
 export function animalModel(s: Species) {
-  return s.id === 'penguin' ? penguin(s) : quadruped(s)
+  return s.id === 'penguin'
+    ? penguin(s)
+    : s.id === 'panda'
+      ? panda(s)
+      : s.id === 'monkey'
+        ? monkey(s)
+        : quadruped(s)
 }
 
 const SKINS = [0xf1c9a5, 0xd9a47a, 0xb97a52, 0x8a5a3a, 0xf6d7bd]

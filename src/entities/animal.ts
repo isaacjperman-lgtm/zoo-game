@@ -3,10 +3,36 @@ import type { Species } from '../data/species'
 import { toWorld } from '../config'
 import { animalModel } from './models'
 
+const NAMES = [
+  'Biscuit',
+  'Maple',
+  'Pickle',
+  'Waffles',
+  'Juniper',
+  'Mochi',
+  'Tango',
+  'Clover',
+  'Bruno',
+  'Pepper',
+  'Olive',
+  'Sunny',
+  'Nacho',
+  'Poppy',
+  'Ziggy',
+  'Hazel',
+  'Rusty',
+  'Willow',
+  'Pudding',
+  'Echo',
+]
+
 export type AnimalStatus = 'wandering' | 'restless' | 'resting' | 'sleeping' | 'eating'
 
 export class Animal {
   group: THREE.Group
+  name = NAMES[(Math.random() * NAMES.length) | 0]
+  /** The game day this animal joined the zoo. */
+  arrived = 1
   hunger = 20
   happiness = 100
   status: AnimalStatus = 'wandering'

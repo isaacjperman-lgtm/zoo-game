@@ -8,6 +8,8 @@ interface Body {
   mass: number // heavier bodies get pushed less
   allowed: (tile: number) => boolean // tile types this body may be pushed onto (-1 = outside the zoo)
   onMoved?: () => void
+  /** Set for walking people: heading while they are moving this frame. */
+  walker?: { hx: number; hz: number }
 }
 
 /**
@@ -18,9 +20,21 @@ interface Body {
 export function resolveCollisions(g: Game) {
   const bodies: Body[] = []
   for (const v of g.visitors)
-    bodies.push({ pos: v.group.position, r: 0.16, mass: 1, allowed: (t) => t === T_PATH || t === -1 })
+    bodies.push({
+      pos: v.group.position,
+      r: 0.16,
+      mass: 1,
+      allowed: (t) => t === T_PATH || t === -1,
+      walker: v.moving ? v : undefined,
+    })
   for (const k of g.keepers)
-    bodies.push({ pos: k.group.position, r: 0.16, mass: 1, allowed: (t) => t !== T_BOOTH })
+    bodies.push({
+      pos: k.group.position,
+      r: 0.16,
+      mass: 1,
+      allowed: (t) => t !== T_BOOTH,
+      walker: k.moving ? k : undefined,
+    })
   for (const a of g.animals) {
     const r = a.species.id === 'penguin' ? 0.18 : a.species.size * 0.55
     bodies.push({
@@ -63,6 +77,25 @@ export function resolveCollisions(g: Game) {
         }
         const overlap = (min - dist) * 0.8
         const share = a.mass / (a.mass + b.mass) // fraction of the push that b takes
+        if (a.walker && b.walker) {
+          // two people on the move: sidestep rather than shove along the line of travel
+          const dot = a.walker.hx * b.walker.hx + a.walker.hz * b.walker.hz
+          const rx = -a.walker.hz // a's right-hand side
+          const rz = a.walker.hx
+          if (dot < -0.3) {
+            // head-on: each steps to their own right
+            tryMove(a, rx * overlap * 0.5, rz * overlap * 0.5)
+            tryMove(b, -rx * overlap * 0.5, -rz * overlap * 0.5)
+            continue
+          }
+          if (dot > 0.3) {
+            // same way: the one behind swings out to the left to overtake
+            const aBehind = a.walker.hx * (b.pos.x - a.pos.x) + a.walker.hz * (b.pos.z - a.pos.z) > 0
+            const m = aBehind ? a : b
+            tryMove(m, -rx * overlap, -rz * overlap)
+            continue
+          }
+        }
         tryMove(a, -nx * overlap * (1 - share), -nz * overlap * (1 - share))
         tryMove(b, nx * overlap * share, nz * overlap * share)
       }

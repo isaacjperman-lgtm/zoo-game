@@ -15,6 +15,17 @@ store in the repository itself (GitHub rejects files over 100 MB), so building t
 which git ignores. Photos you take in the desktop app are saved to your Pictures folder, in a "Zoo Keeper" folder.
 F11 toggles full screen.
 
+### Troubleshooting the desktop app
+
+- **Nothing happens when I open it.** Only one copy can run at a time, so a copy that is stuck in the background makes
+  every new launch quit silently. Stop it with `pkill zoo-keeper` (Linux) or by ending "Zoo Keeper" in Task Manager
+  (Windows), then open it again.
+- **It is laggy.** Make sure your graphics driver is installed and up to date. Launch the Linux AppImage from a
+  terminal to see any graphics errors it prints. Running it from a restricted shell or sandbox can also break
+  graphics, so start it from your normal desktop session.
+- **Where are my saves?** The game saves automatically, and the Save button saves right away. Saves live with the
+  app's own data (in `~/.config/zoo-keeper` on Linux). Photos go to Pictures, in a "Zoo Keeper" folder.
+
 ### Controls
 
 | Action             | Control                              |

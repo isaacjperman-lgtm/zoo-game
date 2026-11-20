@@ -1,10 +1,17 @@
 import * as THREE from 'three'
-import { mat } from './models'
+import { mat, personModel } from './models'
 
 /** Shared by every lamp so main.ts can switch them all on at night. */
 export const lampMat = new THREE.MeshStandardMaterial({
   color: 0xffe9b0,
   emissive: 0xffb84a,
+  emissiveIntensity: 0,
+})
+
+/** Stage spotlights share one material so main.ts can switch them on while a show is running. */
+export const stageLightMat = new THREE.MeshStandardMaterial({
+  color: 0xfff0b0,
+  emissive: 0xffd25a,
   emissiveIntensity: 0,
 })
 
@@ -106,6 +113,72 @@ export function propModel(id: string) {
       box(g, 0.72, 0.3, 0.05, 0x8a5a2b, 0, 0.5, -0.12)
       box(g, 0.06, 0.28, 0.24, 0x3a3a3a, -0.3, 0.14, 0)
       box(g, 0.06, 0.28, 0.24, 0x3a3a3a, 0.3, 0.14, 0)
+      break
+    case 'icecream': {
+      // a little cart: pale blue body, striped umbrella, and a cone on a sign
+      box(g, 0.72, 0.4, 0.5, 0x7ec8e3, 0, 0.32, 0)
+      box(g, 0.8, 0.05, 0.58, 0xf4f1ea, 0, 0.55, 0)
+      box(g, 0.5, 0.08, 0.3, 0xdff3fa, 0, 0.6, 0.02)
+      for (const sx of [-1, 1])
+        cyl(g, 0.09, 0.09, 0.05, 0x3a3a3a, sx * 0.38, 0.1, 0.12, 10).rotation.z = Math.PI / 2
+      cyl(g, 0.02, 0.02, 0.85, 0x6b4a2e, 0.3, 0.98, -0.18, 5)
+      const umb = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.26, 8), mat(0xe98fb0))
+      umb.position.set(0.15, 1.4, -0.05)
+      umb.castShadow = true
+      g.add(umb)
+      ball(g, 0.05, 0xf4f1ea, 0.15, 1.56, -0.05)
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 7), mat(0xd9a05b))
+      cone.rotation.x = Math.PI
+      cone.position.set(-0.22, 0.78, 0.18)
+      g.add(cone)
+      ball(g, 0.075, 0xf29ac0, -0.22, 0.93, 0.18)
+      ball(g, 0.05, 0xf4f1ea, -0.22, 1.0, 0.18)
+      break
+    }
+    case 'fountain': {
+      cyl(g, 0.46, 0.5, 0.16, 0x9aa3ab, 0, 0.08, 0, 16)
+      cyl(g, 0.38, 0.38, 0.05, 0x5fb4e8, 0, 0.17, 0, 16)
+      cyl(g, 0.07, 0.1, 0.42, 0xb9c0c6, 0, 0.38, 0, 8)
+      cyl(g, 0.22, 0.16, 0.06, 0xb9c0c6, 0, 0.6, 0, 12)
+      cyl(g, 0.17, 0.17, 0.03, 0x5fb4e8, 0, 0.64, 0, 12)
+      const spray = new THREE.Mesh(
+        new THREE.ConeGeometry(0.09, 0.32, 8),
+        new THREE.MeshStandardMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.7 }),
+      )
+      spray.position.y = 0.82
+      g.add(spray)
+      g.userData.spray = spray
+      break
+    }
+    case 'arena': {
+      // a small stage with curtains, bunting, spotlights and a performer who gets going during shows
+      box(g, 0.95, 0.1, 0.82, 0x8a5a2b, 0, 0.05, 0)
+      box(g, 0.95, 0.75, 0.06, 0xb23a5a, 0, 0.47, -0.37)
+      for (const sx of [-1, 1]) box(g, 0.12, 0.75, 0.22, 0x7a2a45, sx * 0.42, 0.47, -0.27)
+      box(g, 1.0, 0.07, 0.5, 0xf2c230, 0, 0.88, -0.22)
+      const cols = [0xe94f64, 0xf2c230, 0x3aa6a0, 0xf4f1ea]
+      for (let i = 0; i < 7; i++) ball(g, 0.04, cols[i % 4], -0.42 + i * 0.14, 0.8, 0.14)
+      for (const sx of [-1, 1]) {
+        cyl(g, 0.02, 0.02, 0.5, 0x2c2f33, sx * 0.46, 0.35, 0.34, 5)
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), stageLightMat)
+        lamp.position.set(sx * 0.46, 0.62, 0.34)
+        g.add(lamp)
+      }
+      const performer = personModel(0xd9548b)
+      performer.position.set(0, 0.1, -0.08)
+      performer.scale.setScalar(0.95)
+      g.add(performer)
+      g.userData.performer = performer
+      break
+    }
+    case 'vet':
+      box(g, 0.85, 0.7, 0.7, 0xf4f4f0, 0, 0.35, 0)
+      box(g, 0.97, 0.08, 0.82, 0x3f8f6a, 0, 0.74, 0)
+      box(g, 0.24, 0.06, 0.02, 0xd93a2b, 0, 0.54, 0.36)
+      box(g, 0.06, 0.24, 0.02, 0xd93a2b, 0, 0.54, 0.36)
+      box(g, 0.2, 0.42, 0.02, 0x7fa0b8, 0.24, 0.23, 0.36)
+      box(g, 0.2, 0.2, 0.02, 0xbfe6f0, -0.24, 0.36, 0.36)
+      box(g, 0.5, 0.12, 0.03, 0x3f8f6a, 0, 0.9, 0.3)
       break
     case 'lamp': {
       cyl(g, 0.03, 0.04, 1.3, 0x2c2f33, 0, 0.65, 0, 6)

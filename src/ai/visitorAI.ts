@@ -31,6 +31,7 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
   if (v.state !== 'queue' && v.state !== 'register' && v.state !== 'leaving') {
     v.food += 2 * dt * (g.weather === 'sunny' ? 1.5 : 1) // hot days make people hungry
     v.bladder += 2 * dt
+    v.treat += dt * (g.weather === 'sunny' ? 2.4 : g.weather === 'cloudy' ? 1 : 0.2)
   }
   switch (v.state) {
     case 'queue': {
@@ -85,7 +86,7 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
       if (v.step(dt)) {
         if (v.errand) {
           v.state = 'using'
-          v.timer = 2.5 + Math.random()
+          v.timer = (v.errand.id === 'arena' ? 6 : 2.5) + Math.random() // a show takes a little longer
           v.face(v.errand.group.position.x, v.errand.group.position.z)
         } else {
           v.state = 'watching'
@@ -111,6 +112,14 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
         v.scenery += Math.min(4, deco)
         if (joy < 40) v.sawSad++
         else if (joy >= 75) v.sawHappy++
+        if (a.isBaby) {
+          v.sawBaby++
+          v.satisfaction += 3 // babies are adorable
+        }
+        if (a.sick) {
+          v.sawSick++
+          v.satisfaction -= 3
+        }
         g.earn(Math.round(joy / 25), v.group.position.x, v.group.position.z) // donations
         v.visited.add(a)
       }
@@ -137,16 +146,31 @@ function planNext(g: Game, v: Visitor) {
   const b = g.bfs(v.px, v.py)
 
   // Basic needs come first.
-  const need = v.food > 65 ? 'food' : v.bladder > 60 ? 'restroom' : null
-  const tooDear = need === 'food' && v.priceSensitive && g.foodPrice > g.fair.food * 1.6
-  if (need && tooDear) {
-    // they're hungry but won't pay these prices: grumble once and carry on touring
-    v.gripes.add('Overpriced food')
-    if (!v.complained.has('foodprice')) {
-      v.complained.add('foodprice')
+  const need =
+    v.food > 65
+      ? 'food'
+      : v.bladder > 60
+        ? 'restroom'
+        : v.treat > 60 && g.countProps('icecream')
+          ? 'icecream'
+          : null
+  const dear =
+    v.priceSensitive &&
+    (need === 'food'
+      ? g.foodPrice > g.fair.food * 1.6
+      : need === 'icecream'
+        ? g.iceCreamPrice > g.fair.icecream * 1.6
+        : false)
+  if (need && dear) {
+    // they want it but won't pay these prices: grumble once and carry on touring
+    const tag = need === 'food' ? 'Overpriced food' : 'Overpriced ice cream'
+    v.gripes.add(tag)
+    if (!v.complained.has(tag)) {
+      v.complained.add(tag)
       v.satisfaction -= 8
     }
-    v.food = 20
+    if (need === 'food') v.food = 20
+    else v.treat = 20
   } else if (need) {
     const s = g.nearestService(need, b)
     if (s) {
@@ -158,6 +182,22 @@ function planNext(g: Game, v: Visitor) {
     if (!v.complained.has(need)) {
       v.complained.add(need) // nowhere to go: they remember that
       v.satisfaction -= 8
+    }
+  }
+
+  // a show is on: most guests head for the stage
+  if (
+    g.showActive > 0 &&
+    !v.sawShow &&
+    (!v.priceSensitive || g.showPrice <= g.fair.show * 1.6) &&
+    Math.random() < 0.8
+  ) {
+    const s = g.nearestService('arena', b)
+    if (s) {
+      v.errand = s.prop
+      v.focus = null
+      v.path = g.pathTo(b, s.spot.x, s.spot.y)
+      return
     }
   }
 
@@ -202,6 +242,17 @@ function finishErrand(g: Game, v: Visitor) {
     v.food = 0
     v.satisfaction += 8
     if (v.priceSensitive) judgePrice(v, g.foodPrice, g.fair.food, 'Overpriced food', 6, 0.8)
+  } else if (p?.id === 'icecream') {
+    g.earn(g.iceCreamPrice, pos.x, pos.z)
+    v.ateTreat = true
+    v.treat = 0
+    v.satisfaction += 6
+    if (v.priceSensitive) judgePrice(v, g.iceCreamPrice, g.fair.icecream, 'Overpriced ice cream', 6, 0.8)
+  } else if (p?.id === 'arena') {
+    g.earn(g.showPrice, pos.x, pos.z)
+    v.sawShow = true
+    v.satisfaction += 9
+    if (v.priceSensitive) judgePrice(v, g.showPrice, g.fair.show, 'Overpriced shows', 6, 0.8)
   } else if (p?.id === 'restroom') {
     v.bladder = 0
     v.satisfaction += 5
@@ -287,4 +338,19 @@ function criticVerdict(g: Game, mood: number) {
     g.onMessage('The critic raved about your zoo! +$250')
   } else if (mood < 40) g.onMessage('The critic panned your zoo. Guests will hear about it.')
   else g.onMessage('The critic thought your zoo was just okay.')
+}
+
+/** A show has started: send this guest to the stage, unless they're busy, broke-minded or have seen it. */
+export function inviteToShow(g: Game, v: Visitor) {
+  if (v.sawShow || v.errand?.id === 'arena') return
+  if (v.state !== 'walking' && v.state !== 'watching') return
+  if (v.priceSensitive && g.showPrice > g.fair.show * 1.6) return
+  if (g.tile(v.px, v.py) !== T_PATH) return
+  const b = g.bfs(v.px, v.py)
+  const s = g.nearestService('arena', b)
+  if (!s) return
+  v.errand = s.prop
+  v.focus = null
+  v.state = 'walking'
+  v.path = g.pathTo(b, s.spot.x, s.spot.y)
 }

@@ -39,10 +39,13 @@ export function writeReview(g: Game, v: Visitor): Review {
     'Overpriced tickets': 'Tickets cost too much',
     'Overpriced food': 'Food is too expensive',
     'Overpriced souvenirs': 'Souvenirs cost a fortune',
+    'Overpriced ice cream': 'Ice cream is too expensive',
+    'Overpriced shows': 'The show costs too much',
   }
   for (const t of v.gripes) bad.push({ text: gripeText[t] ?? t, weight: 4.5, tag: t })
   if (v.valued && !v.gripes.size) good.push({ text: 'Great value for money', weight: 3 })
   if (v.rained && v.visited.size < 3) bad.push({ text: 'Got rained on', weight: 1 })
+  if (v.sawSick > 0) bad.push({ text: 'Saw a sick animal', weight: 4, tag: 'Sick animals' })
   if (v.sawSad > 0)
     bad.push({ text: 'Some animals looked miserable', weight: 3 + v.sawSad, tag: 'Unhappy animals' })
   if (v.visited.size <= 1 && v.satisfaction < 70)
@@ -57,6 +60,9 @@ export function writeReview(g: Game, v: Visitor): Review {
   if ([...v.visited].some((a) => a.species.id === fav))
     good.push({ text: `Loved the ${favSpecies(v)}s`, weight: 4 })
   if (v.ateFood) good.push({ text: 'Tasty snacks', weight: 2 })
+  if (v.ateTreat) good.push({ text: 'Delicious ice cream', weight: 2.2 })
+  if (v.sawShow) good.push({ text: 'Loved the show', weight: 3.5 })
+  if (v.sawBaby > 0) good.push({ text: 'The baby animals were adorable', weight: 4 })
   if (v.shopped) good.push({ text: 'Great gift shop', weight: 2 })
   if (v.visited.size >= 4) good.push({ text: 'So much to see', weight: 2.5 })
   if (v.scenery / Math.max(1, v.visited.size) >= 2) good.push({ text: 'Beautiful grounds', weight: 2 })

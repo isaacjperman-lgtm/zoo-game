@@ -28,6 +28,13 @@ export const GOALS: Goal[] = [
       target: 2,
     }),
   },
+  {
+    text: 'Build a Show Stage and host a show',
+    reward: 500,
+    progress: (g) => ({ value: Math.min(1, g.countProps('arena')) + Math.min(1, g.showsHeld), target: 2 }),
+  },
+  { text: 'Welcome a baby animal', reward: 400, progress: (g) => ({ value: g.babiesBorn, target: 1 }) },
+  { text: 'Build a vet clinic', reward: 250, progress: (g) => ({ value: g.countProps('vet'), target: 1 }) },
   { text: 'Welcome 50 guests', reward: 500, progress: (g) => ({ value: g.totalVisitors, target: 50 }) },
   {
     text: 'House every species',

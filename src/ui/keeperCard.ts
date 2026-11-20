@@ -1,13 +1,13 @@
 import type { Game } from '../game'
 import type { Keeper } from '../entities/people'
-import { KEEPER_UPGRADES, type UpgradeKind } from '../config'
+import { KEEPER_UPGRADES, type Duty, type UpgradeKind } from '../config'
 import { sound } from './sound'
 
 const PHASE: Record<Keeper['phase'], string> = {
   idle: 'Waiting for a hungry animal',
   walk: 'Heading to a pen',
   enter: 'Going in through the gate',
-  feed: 'Feeding',
+  feed: 'Working with the animals',
   exit: 'Heading back out',
 }
 
@@ -20,7 +20,10 @@ export function createKeeperCard(root: HTMLElement, game: Game, fmt: (n: number)
     <button class="close" title="Close (Esc)">×</button>
     <input class="name" maxlength="20" spellcheck="false" aria-label="Keeper name" />
     <div class="status"><span class="st"></span></div>
-    <dl class="facts"><dt>Wage per day</dt><dd data-f="wage"></dd><dt>Animals fed</dt><dd data-f="fed"></dd><dt>Walking speed</dt><dd data-f="speed"></dd><dt>Feeds at hunger</dt><dd data-f="at"></dd></dl>
+    <dl class="facts"><dt>Wage per day</dt><dd data-f="wage"></dd><dt>Animals fed</dt><dd data-f="fed"></dd><dt>Babies bred</dt><dd data-f="bred"></dd><dt>Walking speed</dt><dd data-f="speed"></dd><dt>Feeds at hunger</dt><dd data-f="at"></dd></dl>
+    <div class="lbl ups-title">Duty</div>
+    <div class="duty"><button data-d="feed">Feeding</button><button data-d="breed">Breeding</button></div>
+    <div class="status dutytxt"></div>
     <div class="lbl ups-title">Upgrades</div>
     ${kinds
       .map(
@@ -58,6 +61,9 @@ export function createKeeperCard(root: HTMLElement, game: Game, fmt: (n: number)
     b.onclick = () =>
       current && game.upgradeKeeper(current, (b.closest('.up') as HTMLElement).dataset.k as UpgradeKind)
   })
+  card.querySelectorAll<HTMLButtonElement>('.duty button').forEach((b) => {
+    b.onclick = () => current && current.duty !== b.dataset.d && game.setDuty(current, b.dataset.d as Duty)
+  })
   dismiss.onclick = () => {
     if (!current) return
     if (Date.now() < armed) {
@@ -82,9 +88,22 @@ export function createKeeperCard(root: HTMLElement, game: Game, fmt: (n: number)
       const k = current
       if (!k) return
       if (!game.keepers.includes(k)) return hide() // dismissed or otherwise gone
-      setText(q('.st'), `Keeper · ${PHASE[k.phase]}`)
+      setText(
+        q('.st'),
+        `Keeper · ${game.idleReason(k) ?? (k.phase === 'idle' && k.duty === 'breed' ? 'Waiting for a breeding order' : PHASE[k.phase])}`,
+      )
       setText(q('[data-f="wage"]'), fmt(k.wage))
       setText(q('[data-f="fed"]'), String(k.fed))
+      setText(q('[data-f="bred"]'), String(k.bred))
+      card
+        .querySelectorAll<HTMLElement>('.duty button')
+        .forEach((b) => b.classList.toggle('on', b.dataset.d === k.duty))
+      setText(
+        q('.dutytxt'),
+        k.duty === 'breed'
+          ? 'Only carries out your breeding orders and does not feed animals. Specialist wage +25%.'
+          : 'Feeds hungry animals and treats sick ones.',
+      )
       setText(q('[data-f="speed"]'), `${Math.round((k.speed / 2.2) * 100)}%`)
       setText(q('[data-f="at"]'), `${k.feedAt}%`)
       for (const kind of kinds) {

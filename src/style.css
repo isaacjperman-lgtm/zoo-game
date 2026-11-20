@@ -1079,3 +1079,63 @@ button.danger:hover {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.flash {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.flash.go {
+  animation: flash 0.45s ease-out;
+}
+@keyframes flash {
+  0% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.breed {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.breed .lbl {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.bmsg {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.duty {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+.duty button {
+  flex: 1;
+  padding: 7px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.duty button.on {
+  background: #3d8b4f;
+  border-color: transparent;
+}
+.dutytxt {
+  margin-bottom: 4px;
+  line-height: 1.4;
+}

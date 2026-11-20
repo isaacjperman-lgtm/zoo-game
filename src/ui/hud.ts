@@ -1,5 +1,5 @@
 import { moodFace } from '../ai/reviews'
-import { COSTS, KEEPER_COST, KEEPER_WAGE } from '../config'
+import { ADULT_AGE, COSTS, KEEPER_COST, KEEPER_WAGE, TREAT_COST, type PriceKind } from '../config'
 import type { Game } from '../game'
 import type { Animal } from '../entities/animal'
 import { SPECIES } from '../data/species'
@@ -47,7 +47,13 @@ interface Item {
 export function createHud(
   game: Game,
   thumbs: Record<string, string>,
-  act: { speed(n: number): void; save(): void; reset(): void; rename(name: string): void },
+  act: {
+    speed(n: number): void
+    save(): void
+    reset(): void
+    rename(name: string): void
+    photo(): void
+  },
 ) {
   const root = document.getElementById('ui')!
   root.innerHTML = `
@@ -68,6 +74,7 @@ export function createHud(
         <button data-speed="3" title="Faster (3)">3×</button>
         <span class="divider"></span>
         <button id="b-sound" title="Sound effects"></button>
+        <button id="b-photo" title="Save a photo of your zoo (P)">Photo</button>
         <button id="b-stats" title="Charts of funds, rating, guests and income">Stats</button>
         <button id="b-prices" title="Set ticket, food and gift shop prices">Prices</button>
         <button id="b-reviews" title="What guests think of the zoo">Reviews</button>
@@ -101,14 +108,19 @@ export function createHud(
     <div class="bars"></div>
     <dl class="facts"></dl>
     <div class="issues"></div>
+    <div class="breed"><div class="lbl">Breeding</div><div class="bmsg"></div><button class="feedbtn breedbtn"></button></div>
     <button class="feedbtn"></button>
+    <button class="feedbtn treatbtn"></button>
     <button class="sellbtn"></button>`
   root.append(card)
   const cardName = card.querySelector<HTMLInputElement>('.name')!
   const cardBars = card.querySelector<HTMLElement>('.bars')!
   const cardFacts = card.querySelector<HTMLElement>('.facts')!
   const cardIssues = card.querySelector<HTMLElement>('.issues')!
-  const cardFeed = card.querySelector<HTMLButtonElement>('.feedbtn')!
+  const cardFeed = card.querySelector<HTMLButtonElement>('.feedbtn:not(.treatbtn):not(.breedbtn)')!
+  const cardBreed = card.querySelector<HTMLButtonElement>('.breedbtn')!
+  const cardBreedMsg = card.querySelector<HTMLElement>('.bmsg')!
+  const cardTreat = card.querySelector<HTMLButtonElement>('.treatbtn')!
   const cardSell = card.querySelector<HTMLButtonElement>('.sellbtn')!
   // ---- guest feedback panel ----
   const rpanel = document.createElement('aside')
@@ -163,6 +175,8 @@ export function createHud(
     ['ticket', 'Ticket', 'Charged when a guest reaches the booth'],
     ['food', 'Food stand', 'Charged per snack'],
     ['gift', 'Gift shop', 'Charged per souvenir'],
+    ['icecream', 'Ice cream', 'Charged per cone'],
+    ['show', 'Show ticket', 'Charged per guest at each show'],
   ] as const
   ppanel.innerHTML =
     `<button class="close" title="Close">×</button><div class="rhead"><span class="face">💰</span><div><b>Prices</b><div class="status">Click − / + (Shift for ±5)</div></div></div>` +
@@ -177,9 +191,8 @@ export function createHud(
   ppanel.querySelector<HTMLElement>('.close')!.onclick = () => togglePrices(false)
   ppanel.querySelectorAll<HTMLButtonElement>('.prow button').forEach((b) => {
     b.onclick = (e) => {
-      const k = (b.parentElement as HTMLElement).dataset.k as 'ticket' | 'food' | 'gift'
-      const cur = k === 'ticket' ? game.ticketPrice : k === 'food' ? game.foodPrice : game.giftPrice
-      game.setPrice(k, cur + +b.dataset.d! * (e.shiftKey ? 5 : 1))
+      const k = (b.parentElement as HTMLElement).dataset.k as PriceKind
+      game.setPrice(k, game.price[k] + +b.dataset.d! * (e.shiftKey ? 5 : 1))
       sound.click()
     }
   })
@@ -187,8 +200,8 @@ export function createHud(
     if (!ppanel.classList.contains('on')) return
     const fair = game.fair
     for (const row of ppanel.querySelectorAll<HTMLElement>('.prow')) {
-      const k = row.dataset.k as 'ticket' | 'food' | 'gift'
-      const price = k === 'ticket' ? game.ticketPrice : k === 'food' ? game.foodPrice : game.giftPrice
+      const k = row.dataset.k as PriceKind
+      const price = game.price[k]
       set(row.querySelector<HTMLElement>('.pv')!, fmt(price))
       const f = fair[k]
       const verdict = price > f * 1.4 ? 'Too dear' : price < f * 0.75 ? 'Bargain' : 'Fair'
@@ -265,6 +278,7 @@ export function createHud(
   }
 
   const stats = createStatsPanel(root, game)
+  $('#b-photo').onclick = () => act.photo()
   $('#b-stats').onclick = () => {
     togglePrices(false)
     toggleReviews(false)
@@ -292,7 +306,7 @@ export function createHud(
     cardName.value = a.name
     card.querySelector('.sp')!.textContent = a.species.name
     cardBars.innerHTML = bar('Hunger', 0, 'warn') + bar('Happiness', 0, 'good')
-    cardFacts.innerHTML = ['Pen', 'Herd', 'With us', 'Meal cost']
+    cardFacts.innerHTML = ['Pen', 'Herd', 'With us', 'Life stage', 'Meal cost']
       .map((l) => `<dt>${l}</dt><dd></dd>`)
       .join('')
     if (!quiet) sound.click()
@@ -309,6 +323,12 @@ export function createHud(
   }
   card.querySelector<HTMLElement>('.close')!.onclick = () => select(null)
   cardFeed.onclick = () => selected && game.feed(selected)
+  cardTreat.onclick = () => selected && game.treat(selected, true)
+  cardBreed.onclick = () => {
+    if (!selected) return
+    if (selected.breedOrder) game.cancelBreeding(selected)
+    else game.orderBreeding(selected)
+  }
   cardSell.onclick = () => {
     if (!selected) return
     if (Date.now() < sellArmed) {
@@ -320,7 +340,10 @@ export function createHud(
     const reg = game.region(a.tx, a.ty)
     const mates = game.animals.filter((o) => reg.some((r) => r[0] === o.tx && r[1] === o.ty))
     const same = mates.filter((o) => o.species === a.species).length
-    set(card.querySelector<HTMLElement>('.st')!, a.status[0].toUpperCase() + a.status.slice(1))
+    set(
+      card.querySelector<HTMLElement>('.st')!,
+      a.status[0].toUpperCase() + a.status.slice(1) + (a.isBaby ? ' · Baby' : '') + (a.sick ? ' · Sick' : ''),
+    )
     const fills = cardBars.querySelectorAll<HTMLElement>('i')
     const setBar = (i: HTMLElement, v: number, cls: string) => {
       i.className = cls
@@ -336,12 +359,35 @@ export function createHud(
       `${same} ${a.species.name.toLowerCase()}${same === 1 ? '' : 's'}, ${mates.length} in pen`,
     )
     set(dd[2] as HTMLElement, days === 0 ? 'Arrived today' : `${days} day${days === 1 ? '' : 's'}`)
-    set(dd[3] as HTMLElement, fmt(a.species.feedCost))
+    set(
+      dd[3] as HTMLElement,
+      a.isBaby ? `Baby (grows up in ${Math.ceil(((ADULT_AGE - a.age) / 150) * 10) / 10} days)` : 'Adult',
+    )
+    set(dd[4] as HTMLElement, fmt(a.species.feedCost))
+    // breeding: the player orders it, and a keeper on Breeding duty carries it out
+    const why = game.breedBlocker(a)
+    const fee = fmt(game.breedFee(a))
+    cardBreed.style.display = a.pregnantT > 0 || a.isBaby ? 'none' : ''
+    if (a.pregnantT > 0)
+      set(cardBreedMsg, `Expecting a baby. Due in about ${Math.ceil(a.pregnantT)} seconds.`)
+    else if (a.breedOrder)
+      set(
+        cardBreedMsg,
+        game.hasBreeder
+          ? 'A keeper on Breeding duty will pair them up soon.'
+          : 'No keeper is on Breeding duty. Right-click a keeper and set their duty.',
+      )
+    else if (why) set(cardBreedMsg, why + '.')
+    else set(cardBreedMsg, `Ready. Fee ${fee}, due about ${game.gestationTime(a)} seconds after pairing.`)
+    set(cardBreed, a.breedOrder ? 'Cancel breeding order' : `Breed ${a.name} (${fee})`)
+    cardBreed.disabled = !a.breedOrder && !!why
+    cardTreat.style.display = a.sick ? '' : 'none'
+    set(cardTreat, `Treat ${a.name} (${fmt(TREAT_COST)})`)
     set(cardIssues, a.issues.join(' · '))
     cardIssues.style.display = a.issues.length ? '' : 'none'
     set(cardFeed, a.hunger > 5 ? `Feed ${a.name} (${fmt(a.species.feedCost)})` : `${a.name} is full`)
     cardFeed.disabled = a.hunger <= 5
-    const sale = fmt(Math.floor(a.species.cost / 2))
+    const sale = fmt(game.sellValue(a))
     const armed = Date.now() < sellArmed
     set(cardSell, armed ? `Click again to sell for ${sale}` : `Sell for ${sale}`)
     cardSell.classList.toggle('armed', armed)

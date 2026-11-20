@@ -9,7 +9,7 @@ import { createEnvironment } from './world/environment'
 import { createHud } from './ui/hud'
 import { makeThumbnails } from './ui/thumbs'
 import { sound } from './ui/sound'
-import { lampMat } from './entities/props'
+import { lampMat, stageLightMat } from './entities/props'
 import type { Animal } from './entities/animal'
 import type { Keeper } from './entities/people'
 
@@ -73,9 +73,15 @@ railMesh.castShadow = postMesh.castShadow = true
 scene.add(railMesh, postMesh)
 const gateGroup = new THREE.Group()
 scene.add(gateGroup)
-const gateWood = new THREE.MeshStandardMaterial({ color: 0xc89a5a, roughness: 0.7 })
-const gatePostGeo = new THREE.BoxGeometry(0.1, 0.62, 0.1)
-const gateLeafGeo = new THREE.BoxGeometry(0.4, 0.3, 0.035)
+// Gates are painted cream with gold caps and a lintel, so a closed one still stands out from the brown fence.
+const gateWood = new THREE.MeshStandardMaterial({ color: 0xf1e4c3, roughness: 0.6 })
+const gatePostMat = new THREE.MeshStandardMaterial({ color: 0xe9dcc0, roughness: 0.6 })
+const gateGold = new THREE.MeshStandardMaterial({ color: 0xe2b23c, roughness: 0.35, metalness: 0.4 })
+const gatePostGeo = new THREE.BoxGeometry(0.12, 0.9, 0.12)
+const gateCapGeo = new THREE.SphereGeometry(0.085, 10, 8)
+const gateLintelGeo = new THREE.BoxGeometry(1.02, 0.07, 0.08)
+const gateLeafGeo = new THREE.BoxGeometry(0.4, 0.4, 0.05)
+const gateBraceGeo = new THREE.BoxGeometry(0.46, 0.04, 0.03)
 
 const col = new THREE.Color(),
   dummy = new THREE.Object3D()
@@ -98,18 +104,27 @@ function addGate(cx: number, cz: number, dx: number, dy: number) {
   g.rotation.y = Math.atan2(dx, dy) // local +z points out toward the path
   const hinges: THREE.Group[] = []
   for (const e of [-1, 1]) {
-    const post = new THREE.Mesh(gatePostGeo, penMat)
-    post.position.set(e * 0.5, 0.31, 0)
+    const post = new THREE.Mesh(gatePostGeo, gatePostMat)
+    post.position.set(e * 0.5, 0.45, 0)
     post.castShadow = true
+    const cap = new THREE.Mesh(gateCapGeo, gateGold)
+    cap.position.set(e * 0.5, 0.94, 0)
     const hinge = new THREE.Group()
-    hinge.position.set(e * 0.45, 0.27, 0)
+    hinge.position.set(e * 0.45, 0.3, 0)
     const leaf = new THREE.Mesh(gateLeafGeo, gateWood)
     leaf.position.set(-e * 0.2, 0, 0)
     leaf.castShadow = true
-    hinge.add(leaf)
-    g.add(post, hinge)
+    const brace = new THREE.Mesh(gateBraceGeo, gateGold) // a diagonal brace across the door
+    brace.position.set(-e * 0.2, 0, e * 0.02)
+    brace.rotation.z = e * 0.75
+    hinge.add(leaf, brace)
+    g.add(post, cap, hinge)
     hinges.push(hinge)
   }
+  const lintel = new THREE.Mesh(gateLintelGeo, gatePostMat)
+  lintel.position.set(0, 0.84, 0)
+  lintel.castShadow = true
+  g.add(lintel)
   gateGroup.add(g)
   gates.push({ x: cx, z: cz, open: 0, left: hinges[0], right: hinges[1] })
 }
@@ -143,7 +158,7 @@ function rebuildTiles() {
       tileMesh.setMatrixAt(i, dummy.matrix)
       if (paved) col.setHSL(0.11, 0.3, 0.5 + n * 0.07)
       else if (t === T_PEN)
-        col.setHSL(0.09, game.gates.has(i) ? 0.3 : 0.4, (game.gates.has(i) ? 0.5 : 0.36) + n * 0.05)
+        col.setHSL(0.11, game.gates.has(i) ? 0.3 : 0.4, (game.gates.has(i) ? 0.6 : 0.36) + n * 0.04)
       else col.setHSL(0.27 + n * 0.02, 0.5, 0.25 + n * 0.04 + ((x + y) & 1) * 0.02)
       tileMesh.setColorAt(i, col)
       if (t !== T_PEN) continue
@@ -192,6 +207,7 @@ const hud = createHud(game, makeThumbnails(), {
   },
   save: () => game.save(),
   reset: () => game.reset(),
+  photo: () => takePhoto(),
   rename: (name) => {
     env.setSign(name)
     document.title = name
@@ -316,7 +332,8 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     hud.tool = ''
     hud.escape()
-  } else if (e.key === ' ') {
+  } else if (e.key.toLowerCase() === 'p') takePhoto()
+  else if (e.key === ' ') {
     speed = speed === 0 ? 1 : 0
     e.preventDefault()
   } else if ('123'.includes(e.key) && e.key) speed = +e.key
@@ -327,6 +344,41 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix()
   renderer.setSize(innerWidth, innerHeight)
 })
+
+// ---------- photo mode ----------
+const flash = document.createElement('div')
+flash.className = 'flash'
+document.body.append(flash)
+/** Save what the camera sees (without the interface) as a PNG with the zoo's name in the corner. */
+function takePhoto() {
+  renderer.render(scene, camera) // draw now so the canvas holds the current frame
+  const src = renderer.domElement
+  const c = document.createElement('canvas')
+  c.width = src.width
+  c.height = src.height
+  const x = c.getContext('2d')!
+  x.drawImage(src, 0, 0)
+  const size = Math.round(c.height * 0.035)
+  x.font = `700 ${size}px Georgia, serif`
+  x.textBaseline = 'bottom'
+  x.shadowColor = 'rgba(0,0,0,0.7)'
+  x.shadowBlur = size * 0.3
+  x.fillStyle = 'rgba(255,255,255,0.95)'
+  x.fillText(`${game.zooName} · Day ${game.day}`, size, c.height - size * 0.8)
+  c.toBlob((blob) => {
+    if (!blob) return
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${game.zooName.replace(/[^\w]+/g, '-')}-day-${game.day}.png`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  })
+  flash.classList.remove('go')
+  void flash.offsetWidth
+  flash.classList.add('go')
+  sound.click()
+  hud.toast('Photo saved')
+}
 
 // ---------- loop ----------
 const clock = new THREE.Clock()
@@ -444,6 +496,21 @@ function frame() {
   if (scene.fog) {
     const l = (scene.fog.color.r + scene.fog.color.g + scene.fog.color.b) / 3
     scene.fog.color.lerp(stormGrey.setRGB(l, l, l), overcast * 0.5)
+  }
+
+  // props: fountain spray, and the stage comes alive during a show
+  const showOn = game.showActive > 0
+  stageLightMat.emissiveIntensity +=
+    ((showOn ? 3 : 0.15) - stageLightMat.emissiveIntensity) * Math.min(1, real * 4)
+  for (const p of game.props.values()) {
+    const spray = p.group.userData.spray as THREE.Object3D | undefined
+    if (spray) spray.scale.y = 0.85 + Math.sin(t * 5 + p.x) * 0.18
+    const performer = p.group.userData.performer as THREE.Group | undefined
+    if (performer) {
+      performer.position.y = 0.1 + (showOn ? Math.abs(Math.sin(t * 6)) * 0.09 : 0)
+      performer.rotation.y = showOn ? Math.sin(t * 2) * 0.6 : 0
+      animateRig(performer, t, showOn, real)
+    }
   }
 
   // animation

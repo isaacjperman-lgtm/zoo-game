@@ -36,7 +36,7 @@ export function resolveCollisions(g: Game) {
       walker: k.moving ? k : undefined,
     })
   for (const a of g.animals) {
-    const r = a.species.id === 'penguin' ? 0.18 : a.species.size * 0.55
+    const r = (a.species.id === 'penguin' ? 0.18 : a.species.size * 0.55) * a.growth
     bodies.push({
       pos: a.group.position,
       r,

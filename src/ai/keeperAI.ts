@@ -1,6 +1,6 @@
 import type { Game } from '../game'
 import type { Keeper } from '../entities/people'
-import { T_PATH, toWorld } from '../config'
+import { BREEDING, T_PATH, TREAT_COST, toWorld } from '../config'
 
 /**
  * Keeper routine: pick the animal most worth feeding (hungry, and not too far away), walk the paths to
@@ -17,6 +17,7 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
       const job = pickJob(g, k)
       if (!job) return
       k.target = job
+      k.job = k.duty
       plan(g, k)
       break
     }
@@ -29,15 +30,22 @@ export function updateKeeper(g: Game, k: Keeper, dt: number) {
       if (Math.hypot(t.x - p.x, t.z - p.z) < 0.6) {
         k.face(t.x, t.z)
         k.phase = 'feed'
-        k.timer = k.feedTime
-        k.target!.eatTimer = 1.6
+        k.timer = k.job === 'breed' ? BREEDING.workTime : k.feedTime
+        k.target!.eatTimer = k.timer + 0.2
       } else k.moveTo(t.x, t.z, dt)
       break
     }
     case 'feed':
       if ((k.timer -= dt) <= 0) {
-        g.feed(k.target!)
-        k.fed++
+        const a = k.target!
+        if (k.job === 'breed') g.completeBreeding(k, a)
+        else {
+          if (a.sick) g.treat(a)
+          if (a.hunger > k.feedAt) {
+            g.feed(a)
+            k.fed++
+          }
+        }
         k.target = null
         k.phase = k.exit ? 'exit' : 'idle'
       }
@@ -60,11 +68,28 @@ function pickJob(g: Game, k: Keeper) {
   let bestScore = -Infinity
   if (g.tile(k.px, k.py) !== T_PATH) return null
   const b = g.bfs(k.px, k.py)
+  if (k.duty === 'breed') {
+    // breeding keepers only look for animals the player has ordered to breed, nearest first
+    for (const a of g.animals) {
+      if (!a.breedOrder || claimed.has(a) || g.money < g.breedFee(a)) continue
+      if (!g.gateSpotsFor(a, b).length) continue
+      const q = a.group.position
+      const score = -Math.hypot(q.x - p.x, q.z - p.z)
+      if (score > bestScore) {
+        best = a
+        bestScore = score
+      }
+    }
+    return best
+  }
   for (const a of g.animals) {
-    if (a.hunger <= k.feedAt || claimed.has(a) || g.money < a.species.feedCost) continue
+    const needsTreat = a.sick && g.hasClinic && g.money >= TREAT_COST
+    const needsFeed = a.hunger > k.feedAt && g.money >= a.species.feedCost
+    if (claimed.has(a) || (!needsTreat && !needsFeed)) continue
     if (!g.gateSpotsFor(a, b).length) continue // no reachable gate: keepers can't get in
     const q = a.group.position
-    const score = a.hunger - Math.hypot(q.x - p.x, q.z - p.z) * 1.5
+    // sick animals come first, then the hungriest nearby
+    const score = (needsTreat ? 100 : 0) + (needsFeed ? a.hunger : 0) - Math.hypot(q.x - p.x, q.z - p.z) * 1.5
     if (score > bestScore) {
       best = a
       bestScore = score

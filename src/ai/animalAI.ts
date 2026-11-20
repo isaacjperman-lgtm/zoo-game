@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { Game } from '../game'
 import type { Animal } from '../entities/animal'
-import { toWorld, toTile, T_PEN } from '../config'
+import { toWorld, toTile, T_PEN, SICKNESS } from '../config'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -33,19 +33,54 @@ export function updateAnimal(g: Game, a: Animal, dt: number) {
   const slow = a.status === 'sleeping' || a.status === 'resting'
 
   a.hunger = Math.min(100, a.hunger + sp.hungerRate * dt * (slow ? 0.5 : 1))
+  if (a.isBaby) a.age += dt
+  // Neglect makes animals ill; a vet clinic lets keepers cure them and halves the risk, otherwise they recover alone.
+  if (a.immuneT > 0) a.immuneT -= dt
+  if (!a.sick) {
+    const hungry = a.hunger > SICKNESS.hungerAbove
+    const unhappy = a.happiness < SICKNESS.unhappyBelow
+    const risk =
+      (SICKNESS.baseRisk + (hungry ? SICKNESS.hungerRisk : 0) + (unhappy ? SICKNESS.unhappyRisk : 0)) *
+      (g.hasClinic ? SICKNESS.clinicFactor : 1)
+    if (a.immuneT <= 0 && Math.random() < risk * dt) {
+      a.sick = true
+      a.sickCause = hungry ? 'left hungry' : unhappy ? 'unhappy' : 'bad luck'
+      g.onMessage(`${a.name} the ${sp.name.toLowerCase()} is sick (${a.sickCause}).`)
+    }
+  } else if (Math.random() < SICKNESS.recovery * dt) {
+    a.sick = false
+    a.immuneT = SICKNESS.immunity
+  }
   const room = reg.length / (same * sp.space)
   const crowded = room < 1 ? (1 - room) * 40 : 0
   const lonely = sp.social && same === 1
-  a.happiness = clamp(100 - a.hunger * 0.7 - crowded - (lonely ? 15 : 0) - (stressed ? 35 : 0), 0, 100)
+  a.happiness = clamp(
+    100 -
+      a.hunger * 0.7 -
+      crowded -
+      (lonely ? 15 : 0) -
+      (stressed ? 35 : 0) -
+      (a.sick ? SICKNESS.happinessPenalty : 0),
+    0,
+    100,
+  )
   a.issues = []
   if (a.hunger > 60) a.issues.push('Hungry')
   if (crowded > 5) a.issues.push('Crowded')
   if (lonely) a.issues.push('Lonely')
   if (stressed) a.issues.push('Scared of predator')
+  if (a.sick)
+    a.issues.push(
+      `Sick, ${a.sickCause} (${g.hasClinic ? 'a keeper can treat it' : 'build a vet clinic to treat it faster'})`,
+    )
   if (!g.hasGate(reg)) a.issues.push('No gate for keepers')
+  else if (!g.gateReachable(reg))
+    a.issues.push("Keepers can't reach this pen (link a path from the entrance)")
 
   // pose: lie down a little while resting
-  const ty = a.status === 'sleeping' || a.status === 'resting' ? 0.8 : 1
+  const growth = a.growth // babies are smaller
+  const ty = (a.status === 'sleeping' || a.status === 'resting' ? 0.8 : 1) * growth
+  a.group.scale.x = a.group.scale.z = growth
   a.group.scale.y += (ty - a.group.scale.y) * Math.min(1, dt * 4)
 
   if (a.eatTimer > 0) {

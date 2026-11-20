@@ -1,5 +1,14 @@
 import * as THREE from 'three'
-import { ENTRANCE, toWorld, toTile, KEEPER_WAGE, WAGE_PER_LEVEL, type UpgradeKind } from '../config'
+import {
+  ENTRANCE,
+  toWorld,
+  toTile,
+  KEEPER_WAGE,
+  WAGE_PER_LEVEL,
+  BREEDING,
+  type Duty,
+  type UpgradeKind,
+} from '../config'
 
 const KEEPER_NAMES = [
   'Sam',
@@ -128,6 +137,12 @@ export class Visitor extends Walker {
   sawHappy = 0
   scenery = 0
   ateFood = false
+  ateTreat = false
+  sawShow = false
+  sawBaby = 0
+  sawSick = 0
+  /** Craving for ice cream; grows fast on sunny days. */
+  treat = Math.random() * 30
   rained = false
   /** Price complaints (review tags) and whether they thought the visit was good value. */
   gripes = new Set<string>()
@@ -151,6 +166,7 @@ export class Visitor extends Walker {
       this.ticketFactor = 0.5
       this.priceSensitive = false
       this.stops = 3 + Math.floor(Math.random() * 2)
+      this.treat = 50 // kids want ice cream
       this.speed *= 1.1
     } else if (kind === 'teacher') {
       this.ticketFactor = 0
@@ -188,6 +204,11 @@ export class Keeper extends Walker {
   /** Upgrade levels bought for this keeper, and how many animals they've fed. */
   levels: Record<UpgradeKind, number> = { speed: 0, skill: 0 }
   fed = 0
+  /** Feeding keepers feed and treat; Breeding keepers only carry out the player's breeding orders. */
+  duty: Duty = 'feed'
+  /** The duty this keeper took the current job under. */
+  job: Duty = 'feed'
+  bred = 0
   constructor() {
     super(personModel(0x2a5db0, true), 2.2)
     this.group.position.set(toWorld(ENTRANCE.x), 0, toWorld(ENTRANCE.y))
@@ -204,6 +225,7 @@ export class Keeper extends Walker {
     return 1.4 - 0.25 * this.levels.skill
   }
   get wage() {
-    return Math.round(KEEPER_WAGE * (1 + WAGE_PER_LEVEL * (this.levels.speed + this.levels.skill)))
+    const base = KEEPER_WAGE * (1 + WAGE_PER_LEVEL * (this.levels.speed + this.levels.skill))
+    return Math.round(base * (this.duty === 'breed' ? BREEDING.breederWage : 1))
   }
 }

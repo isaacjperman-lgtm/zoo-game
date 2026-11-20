@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { SPECIES } from '../data/species'
 import { animalModel, personModel } from '../entities/models'
+import { BUILDINGS } from '../data/buildings'
+import { propModel } from '../entities/props'
 
-/** Renders each species (and the keeper) once to a PNG data URL for use as shop icons. */
+/** Renders each species, the keeper and every building once to a PNG data URL for use as shop icons. */
 export function makeThumbnails(): Record<string, string> {
   const out: Record<string, string> = {}
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
@@ -19,6 +21,7 @@ export function makeThumbnails(): Record<string, string> {
   const jobs: [string, THREE.Group][] = [
     ...SPECIES.map((s) => [s.id, animalModel(s)] as [string, THREE.Group]),
     ['keeper', personModel(0x2a5db0, true)],
+    ...BUILDINGS.map((b) => [b.id, propModel(b.id)] as [string, THREE.Group]),
   ]
   for (const [id, g] of jobs) {
     sc.add(g)

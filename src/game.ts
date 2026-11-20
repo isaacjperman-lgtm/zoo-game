@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { SPECIES } from './data/species'
 import {
   N,
+  T_GRASS,
   T_PATH,
   T_PEN,
   T_BOOTH,
@@ -16,6 +17,7 @@ import {
   idx,
   inBounds,
   toTile,
+  toWorld,
   DIRS,
 } from './config'
 import { Animal } from './entities/animal'
@@ -24,7 +26,18 @@ import { bfs, pathTo, reachable, type Bfs } from './world/pathfinding'
 import { updateAnimal } from './ai/animalAI'
 import { updateKeeper } from './ai/keeperAI'
 import { updateVisitors } from './ai/visitorAI'
+import { resolveCollisions } from './world/collision'
+import { BUILDINGS } from './data/buildings'
+import { propModel } from './entities/props'
+import { GOALS } from './goals'
 import type { Species } from './data/species'
+
+export interface Prop {
+  id: string
+  x: number
+  y: number
+  group: THREE.Group
+}
 
 export class Game {
   tiles = new Uint8Array(N * N)
@@ -35,6 +48,9 @@ export class Game {
   visitors: Visitor[] = []
   keepers: Keeper[] = []
   root = new THREE.Group()
+  props = new Map<number, Prop>() // buildings and decorations, keyed by tile index
+  goalIndex = 0
+  private goalTimer = 0
   queue: Visitor[] = [] // guests waiting for tickets, first in line first
   guestMood = 70
   spawnTimer = 3
@@ -42,6 +58,9 @@ export class Game {
   message = ''
   onTilesChanged = () => {}
   onMessage = (_m: string) => {}
+  /** Fired whenever guests pay, with the world position of the payment. */
+  onIncome = (_x: number, _z: number, _amount: number) => {}
+  onSound = (_name: 'build' | 'hire' | 'goal') => {}
 
   constructor() {
     this.ensureFixedTiles()
@@ -71,14 +90,114 @@ export class Game {
   // ---- building ----
   paint(x: number, y: number, type: number) {
     if (!inBounds(x, y) || isFixed(x, y)) return
+    const prop = this.props.get(idx(x, y))
+    if (prop) {
+      if (type !== T_GRASS) return this.onMessage('Clear the building first.')
+      return this.removeProp(prop)
+    }
     const cur = this.tiles[idx(x, y)]
     if (cur === type) return
     const cost = type === T_PATH ? COSTS.path : type === T_PEN ? COSTS.pen : 0
     if (this.money < cost) return this.onMessage('Not enough money!')
     this.money -= cost
     this.tiles[idx(x, y)] = type
+    this.regionCache.clear()
     if (cur === T_PEN) this.revalidateAnimals()
+    this.orientProps()
+    this.onSound('build')
     this.onTilesChanged()
+  }
+
+  // ---- buildings and decorations ----
+  placeProp(id: string, x: number, y: number) {
+    const def = BUILDINGS.find((b) => b.id === id)
+    if (!def || !inBounds(x, y) || isFixed(x, y)) return
+    if (this.tile(x, y) !== T_GRASS) return this.onMessage('Buildings go on open grass.')
+    if (this.props.has(idx(x, y))) return this.onMessage('Something is already built there.')
+    if (this.money < def.cost) return this.onMessage('Not enough money!')
+    this.money -= def.cost
+    this.addProp(id, x, y)
+    this.orientProps()
+    this.onSound('build')
+  }
+
+  private addProp(id: string, x: number, y: number) {
+    const group = propModel(id)
+    group.position.set(toWorld(x), 0.05, toWorld(y))
+    this.root.add(group)
+    this.props.set(idx(x, y), { id, x, y, group })
+  }
+
+  private removeProp(p: Prop) {
+    this.root.remove(p.group)
+    this.props.delete(idx(p.x, p.y))
+    this.money += Math.floor((BUILDINGS.find((b) => b.id === p.id)?.cost ?? 0) / 2)
+    this.onSound('build')
+  }
+
+  /** Turn each prop to face the nearest path tile. */
+  orientProps() {
+    for (const p of this.props.values())
+      for (const [dx, dy] of DIRS)
+        if (this.tile(p.x + dx, p.y + dy) === T_PATH) {
+          p.group.rotation.y = Math.atan2(dx, dy)
+          break
+        }
+  }
+
+  countProps(id: string) {
+    let n = 0
+    for (const p of this.props.values()) if (p.id === id) n++
+    return n
+  }
+
+  /** Nearest reachable building of this kind and the path tile to stand on to use it. */
+  nearestService(id: string, b: Bfs) {
+    let best: { prop: Prop; spot: { x: number; y: number; d: number } } | null = null
+    for (const p of this.props.values()) {
+      if (p.id !== id) continue
+      for (const [dx, dy] of DIRS) {
+        const x = p.x + dx
+        const y = p.y + dy
+        if (this.tile(x, y) !== T_PATH || !reachable(b, x, y)) continue
+        const d = b.dist[idx(x, y)]
+        if (!best || d < best.spot.d) best = { prop: p, spot: { x, y, d } }
+      }
+    }
+    return best
+  }
+
+  /** Decorations within 3 tiles of a tile (a guest's viewing spot). */
+  decorNear(x: number, y: number) {
+    let n = 0
+    for (const p of this.props.values()) {
+      if (BUILDINGS.find((b) => b.id === p.id)?.kind !== 'decor') continue
+      if (Math.abs(p.x - x) <= 3 && Math.abs(p.y - y) <= 3) n++
+    }
+    return n
+  }
+
+  /** Pay the zoo, with a floating "+$" at the given world position. */
+  earn(amount: number, x: number, z: number) {
+    if (amount <= 0) return
+    this.money += amount
+    this.onIncome(x, z, amount)
+  }
+
+  // ---- goals ----
+  get currentGoal() {
+    const goal = GOALS[this.goalIndex]
+    return goal ? { goal, ...goal.progress(this) } : null
+  }
+  private checkGoals() {
+    let g = this.currentGoal
+    while (g && g.value >= g.target) {
+      this.money += g.goal.reward
+      this.goalIndex++
+      this.onMessage(`Goal complete: ${g.goal.text}  (+$${g.goal.reward})`)
+      this.onSound('goal')
+      g = this.currentGoal
+    }
   }
 
   revalidateAnimals() {
@@ -91,7 +210,18 @@ export class Game {
     })
   }
 
+  /** Pen regions are looked up by every animal every frame, so cache them until the tiles change. */
+  private regionCache = new Map<number, number[][]>()
   region(x: number, y: number) {
+    const key = idx(x, y)
+    const hit = this.regionCache.get(key)
+    if (hit) return hit
+    const out = this.floodRegion(x, y)
+    for (const [rx, ry] of out) this.regionCache.set(idx(rx, ry), out)
+    if (!out.length) this.regionCache.set(key, out)
+    return out
+  }
+  private floodRegion(x: number, y: number) {
     const seen = new Set<number>()
     const st = [[x, y]]
     const out: number[][] = []
@@ -109,6 +239,7 @@ export class Game {
     if (this.tile(x, y) !== T_PEN) return this.onMessage('Animals need to go inside a pen (brown tiles).')
     if (this.money < sp.cost) return this.onMessage('Not enough money!')
     this.money -= sp.cost
+    this.onSound('build')
     const a = new Animal(sp, x, y)
     this.animals.push(a)
     this.root.add(a.group)
@@ -117,6 +248,7 @@ export class Game {
   hireKeeper() {
     if (this.money < KEEPER_COST) return this.onMessage('Not enough money!')
     this.money -= KEEPER_COST
+    this.onSound('hire')
     const k = new Keeper()
     this.keepers.push(k)
     this.root.add(k.group)
@@ -172,6 +304,11 @@ export class Game {
     for (const a of this.animals) updateAnimal(this, a, dt)
     for (const k of this.keepers) updateKeeper(this, k, dt)
     updateVisitors(this, dt)
+    resolveCollisions(this)
+    if ((this.goalTimer -= dt) <= 0) {
+      this.goalTimer = 1
+      this.checkGoals()
+    }
   }
 
   private endDay() {
@@ -201,6 +338,10 @@ export class Game {
         time: this.time,
         animals: this.animals.map((a) => ({ s: a.species.id, x: a.tx, y: a.ty, h: a.hunger })),
         keepers: this.keepers.length,
+        props: [...this.props.values()].map((p) => ({ id: p.id, x: p.x, y: p.y })),
+        goal: this.goalIndex,
+        guests: this.totalVisitors,
+        mood: this.guestMood,
       }),
     )
   }
@@ -210,10 +351,16 @@ export class Game {
     try {
       const d = JSON.parse(raw)
       this.tiles.set(d.tiles)
+      this.regionCache.clear()
       this.ensureFixedTiles()
       this.money = d.money
       this.day = d.day
       this.time = d.time
+      this.goalIndex = d.goal ?? 0
+      this.totalVisitors = d.guests ?? 0
+      this.guestMood = d.mood ?? 70
+      for (const p of d.props ?? []) this.addProp(p.id, p.x, p.y)
+      this.orientProps()
       for (const a of d.animals) {
         const sp = SPECIES.find((s) => s.id === a.s)
         if (!sp) continue

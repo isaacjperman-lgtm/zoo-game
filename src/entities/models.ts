@@ -75,10 +75,21 @@ function quadruped(s: Species) {
     k = s.size,
     id = s.id
   const rand = seeded(id.length * 977 + 13)
-  const legH = k * (id === 'giraffe' ? 1.7 : id === 'elephant' ? 0.75 : 0.8)
-  const bh = k * (id === 'elephant' ? 1.05 : 0.8)
-  const bl = k * (id === 'elephant' ? 1.8 : 1.6)
-  const bw = k * (id === 'elephant' ? 1.0 : 0.72)
+  const dims: Record<string, number[]> = {
+    // leg height, body height, body length, body width, leg radius (all x size)
+    giraffe: [1.7, 0.8, 1.6, 0.72, 0.075],
+    elephant: [0.75, 1.05, 1.8, 1.0, 0.17],
+    bear: [0.55, 0.95, 1.5, 0.85, 0.12],
+    hippo: [0.4, 1.0, 1.8, 1.05, 0.16],
+    rhino: [0.5, 1.0, 1.8, 0.95, 0.15],
+    panda: [0.5, 0.95, 1.4, 0.9, 0.12],
+    monkey: [0.6, 0.7, 1.3, 0.6, 0.07],
+  }
+  const [dl, dbh, dbl, dbw, dlr] = dims[id] ?? [0.8, 0.8, 1.6, 0.72, 0.085]
+  const legH = k * dl
+  const bh = k * dbh
+  const bl = k * dbl
+  const bw = k * dbw
   const hip = legH + bh * 0.12,
     by = legH + bh * 0.42
 
@@ -86,7 +97,7 @@ function quadruped(s: Species) {
   body.rotation.x = Math.PI / 2
   body.scale.x = bw / bh
 
-  const lr = k * (id === 'elephant' ? 0.17 : id === 'giraffe' ? 0.075 : 0.085)
+  const lr = k * dlr
   for (const [sx, sz, ph] of [
     [1, 1, 0],
     [-1, -1, 0],
@@ -159,9 +170,12 @@ function quadruped(s: Species) {
       by + bh * 0.35,
       bl * 0.4,
     ).rotation.x = 0.5
-    const hk = id === 'elephant' ? 1.5 : 1
-    const h = head(k * hk, s.color, id === 'lion' ? 0xe8c27a : id === 'zebra' ? 0x2a2a2e : s.color)
-    h.position.set(0, by + bh * (id === 'elephant' ? 0.2 : 0.55), bl * (id === 'elephant' ? 0.58 : 0.55))
+    const hk = { elephant: 1.5, hippo: 1.6, bear: 1.15 }[id] ?? 1
+    const snout = { lion: 0xe8c27a, zebra: 0x2a2a2e, bear: 0x8a6a4a, hippo: 0xb09aa6 }[id] ?? s.color
+    const headY = { elephant: 0.2, hippo: 0.15, bear: 0.45 }[id] ?? 0.55
+    const headZ = { elephant: 0.58, hippo: 0.6, bear: 0.58 }[id] ?? 0.55
+    const h = head(k * hk, s.color, snout)
+    h.position.set(0, by + bh * headY, bl * headZ)
     g.add(h)
 
     if (id === 'zebra') {
@@ -223,6 +237,13 @@ function quadruped(s: Species) {
       for (const [x, y, z, r] of segs)
         add(h, new THREE.CylinderGeometry(k * r, k * r * 0.88, k * 0.34, 7), s.color, x, k * y, k * z)
       tail(g, 0, by + bh * 0.15, -bl * 0.52, k * 0.8, s.color, 0x6c6c78)
+    } else if (id === 'bear') {
+      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.25, s.color)
+    } else if (id === 'hippo') {
+      const kk = k * 1.6
+      for (const sx of [-1, 1])
+        add(h, new THREE.SphereGeometry(kk * 0.035, 6, 6), s.accent, sx * kk * 0.08, kk * 0.06, kk * 0.44)
+      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.3, s.accent)
     }
   }
   g.userData.rig = { legs, speed: 7, amp: 0 } satisfies Rig

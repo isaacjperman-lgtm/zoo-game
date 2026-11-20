@@ -4,32 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A browser-based 3D zoo simulator (Three.js + Vite + TypeScript) made for a couple of friends. The current version is a generic base. Specific features will be requested later, so keep the code easy to extend and data-driven.
+Zoo Keeper: a browser-based 3D zoo simulator (Three.js + Vite + TypeScript) made for a couple of friends. The current version is a generic base. Specific features will be requested later, so keep the code easy to extend and data-driven. The project is meant to stay anonymous: don't put personal names or emails in files or commits (git is configured with an anonymous identity for this repo).
 
 ## Commands
 
-- `npm run dev` starts the Vite dev server.
-- `npm run build` runs `tsc --noEmit` and then `vite build`.
-- `npx tsc --noEmit` type-checks only.
-- There is no test runner or linter configured.
+- `npm run dev` starts the Vite dev server (http://127.0.0.1:5173/). In dev only, `window.game` exposes the `Game` instance in the browser console, e.g. `game.money = 5000`.
+- `npm run build` runs `tsc --noEmit` and then `vite build`. `npm run typecheck` type-checks only.
+- `npm run format` runs Prettier over the repo (no semicolons, single quotes, width 110). Run it before committing.
+- There is no test runner or linter. To check behavior, drive `window.game` from a headless browser (e.g. Playwright with `--use-angle=swiftshader` for WebGL) and step `game.update(0.1)` in a loop.
+- Pushing to `main` redeploys the site to GitHub Pages via `.github/workflows/deploy.yml`. `vite.config.ts` uses `base: './'` so the build works from a subpath.
 
 ## Architecture
 
-- `src/game.ts` is all simulation state and rules, with no DOM code. The `Game` class owns the tile grid (`N`×`N` `Uint8Array` of `T_GRASS`/`T_PATH`/`T_PEN`), money, the day clock, and the animal, visitor and keeper lists. It also holds BFS pathfinding over path tiles, save/load (localStorage key `zoo-save`), and per-frame `update(dt)`. `Game.root` is a `THREE.Group` that entity meshes are added to.
-- `src/main.ts` is rendering, input and UI. It sets up the renderer, lighting and day/night cycle (driven by `game.time`), instanced tile and fence meshes, the HUD and tool bar, and pointer handling. It talks to `Game` through methods (`paint`, `buyAnimal`, `hireKeeper`, `feedAt`) and callbacks (`onTilesChanged`, `onMessage`). When tiles change it rebuilds the instanced meshes with `rebuildTiles()`.
-- `src/entities/models.ts` builds the procedural low-poly animal and person meshes and `animateRig` (leg/arm swing). `src/world/environment.ts` builds the sky dome, trees, perimeter fence, gate and clouds. `src/ui/hud.ts` is the DOM HUD (styles in `src/style.css`), and `src/ui/thumbs.ts` renders the shop icons from the 3D models.
-- `src/data/species.ts` is the data-driven animal list. Adding a `Species` entry automatically adds a shop button, a procedural model (built in `animalModel`) and its hunger and space needs.
+The simulation (`Game`) has no DOM code. `main.ts` and `ui/` read its state each frame and call its methods.
 
-- `src/ai/` holds per-entity behavior called from `Game.update`: `animalAI.ts` (needs, sleep, herding), `keeperAI.ts` (job state machine) and `visitorAI.ts` (queue, register, tour, leave). `src/world/pathfinding.ts` is the BFS over path tiles.
+- `src/config.ts`: balance numbers (prices, wages, `DAY_LENGTH`), tile types (`T_GRASS`/`T_PATH`/`T_PEN`/`T_BOOTH`), the fixed `ENTRANCE`/`DESK`/`BOOTH` tiles (`isFixed`), and grid helpers (`toWorld`, `toTile`, `idx`).
+- `src/game.ts`: the `Game` class. It owns the tile grid, money, day clock, animals, visitors, keepers, the ticket `queue`, `props` (buildings and decorations keyed by tile index), goal progress and save/load (localStorage key `zoo-save`). `update(dt)` runs the AI modules, then collisions, then goal checks. `Game.root` is the `THREE.Group` that entity meshes are added to. Callbacks `onTilesChanged`, `onMessage`, `onIncome` and `onSound` are how it talks to the UI.
+- `src/ai/`: per-entity behavior. `animalAI.ts` (hunger, happiness, sleep, herding, predators), `keeperAI.ts` (job state machine: pick animal, walk the paths, step in, feed, step out) and `visitorAI.ts` (arrive, queue, register, tour, errands, leave).
+- `src/entities/`: `animal.ts`, `people.ts` (visitors and keepers share a `Walker` base), `models.ts` (procedural low-poly meshes and `animateRig`) and `props.ts` (building and decoration models).
+- `src/world/`: `pathfinding.ts` (BFS over path tiles), `collision.ts` (pushes overlapping people and animals apart, never onto ground they don't belong on) and `environment.ts` (sky, trees, perimeter fence, gate, ticket booth, clouds).
+- `src/data/`: `species.ts` and `buildings.ts`. These are the lists to edit to add content. `src/goals.ts` is the ordered progression list.
+- `src/main.ts`: renderer, lighting and day/night cycle, instanced terrain, tool input and the main loop.
+- `src/ui/`: `hud.ts` (DOM HUD, shop tabs, goal panel, floating text), `thumbs.ts` (renders shop icons from the 3D models), `sound.ts` (synthesized effects, no audio files). Styles are in `src/style.css`.
 
-## Gameplay loop to keep in mind
+## Adding content
 
-- Guests spawn on the road outside the gate (only if an animal is visible from a path connected to the entrance), queue to the ticket desk tile, pay `ADMISSION` at registration, tour enclosures (favorite species, unseen and happy animals preferred), then leave. Long waits make them leave angry. Their mood on leaving feeds `Game.rating`.
-- The entrance, desk and booth tiles are fixed (`isFixed` in `config.ts`) and can't be built over.
-- Animal happiness is a function of hunger and of pen size per animal of the same species (`Species.space`).
-- Removing a pen tile under an animal sells it for half price (`revalidateAnimals`).
-- Keepers pick a hungry, nearby animal, walk the paths to a spot beside its pen, step in, feed, and step back out. Animals sleep at night, nap by day, herd together if social, and get scared if a predator shares their pen.
+- **New animal:** add a `Species` entry (flags: `social`, `predator`, `sleepiness`). A unique look needs a size entry in the `dims` table and a branch in `quadruped()` in `models.ts`.
+- **New building or decoration:** add to `BUILDINGS`, add a case in `propModel()` in `props.ts`, and for a new service also handle its id in `finishErrand` and `planNext` in `visitorAI.ts`.
+- **New shop tab or tool:** edit `tabsDef` in `hud.ts` and handle the tool id in `use()` in `main.ts`.
+- **Goal:** add to `GOALS` in `goals.ts`.
+
+## Gameplay rules to keep in mind
+
+- Guests only spawn if an animal is visible from a path connected to the entrance. They queue at the desk, pay `ADMISSION`, tour enclosures (favorite species, unseen and happy animals preferred), use food stands and restrooms when needed, browse the gift shop on the way out, then leave. Long waits make them leave angry. Their mood on leaving feeds `Game.rating` (30%).
+- Income goes through `Game.earn` so it triggers the floating "+$" text and coin sound.
+- Animal happiness drops with hunger, a cramped pen (`Species.space`), loneliness (social species) and a predator in the pen. Animals sleep at night and nap by day.
+- Buildings go on open grass, face the nearest path, and must be cleared before building a path or pen there. Clearing refunds half. Removing a pen tile under an animal sells it for half price.
+- Clicking a tool-less action (like Hire) deselects the current tool, and Esc deselects too.
 
 ## Not yet implemented
 
-Rapier physics. `src/world/` and `src/build/` hold only the environment so far, and game rules still live in `game.ts`. New species with a unique look need a branch in `quadruped()` in `models.ts`.
+Rapier physics, a title screen and zoo naming, and a test suite.

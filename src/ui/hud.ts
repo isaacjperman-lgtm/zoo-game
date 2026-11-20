@@ -2,6 +2,8 @@ import { COSTS, KEEPER_COST, KEEPER_WAGE } from '../config'
 import type { Game } from '../game'
 import type { Animal } from '../entities/animal'
 import { SPECIES } from '../data/species'
+import { BUILDINGS } from '../data/buildings'
+import { sound } from './sound'
 
 const svg = (b: string) =>
   `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${b}</svg>`
@@ -57,9 +59,11 @@ export function createHud(
         <button data-speed="2" title="Fast (2)">2×</button>
         <button data-speed="3" title="Faster (3)">3×</button>
         <span class="divider"></span>
+        <button id="b-sound" title="Sound effects"></button>
         <button id="b-save">Save</button><button id="b-reset" class="danger">New game</button>
       </div>
     </header>
+    <div class="panel goal" id="goal"><div class="lbl">Goal</div><div class="g-text" id="g-text"></div><div class="meter"><i id="g-bar"></i></div><div class="g-rw" id="g-rw"></div></div>
     <div id="toast"></div><div id="tip"></div><div id="hover"></div>
     <footer class="dock panel"><nav class="tabs"></nav><div class="items"></div></footer>
     <div class="hint" id="hint">Right-drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; WASD to pan &nbsp;·&nbsp; Space to pause</div>`
@@ -104,10 +108,20 @@ export function createHud(
           name: 'Clear',
           price: 0,
           icon: ICON.clear,
-          tip: 'Remove paths and enclosures. Animals in a removed pen are sold at half price.',
+          tip: 'Remove paths, enclosures and buildings (half refund). Animals in a removed pen are sold at half price.',
         },
       ],
     ],
+    ...(['service', 'decor'] as const).map((kind): [string, Item[]] => [
+      kind === 'service' ? 'Facilities' : 'Decor',
+      BUILDINGS.filter((b) => b.kind === kind).map((b) => ({
+        id: 'b:' + b.id,
+        name: b.name,
+        price: b.cost,
+        icon: `<img src="${thumbs[b.id]}" alt="">`,
+        tip: b.tip,
+      })),
+    ]),
     [
       'Animals',
       SPECIES.map((s) => ({
@@ -149,6 +163,7 @@ export function createHud(
       b.dataset.id = it.id
       b.innerHTML = `<div class="pic">${it.icon}</div><div class="nm">${it.name}</div><div class="pr">${it.price ? fmt(it.price) : 'Free'}</div>`
       b.onclick = () => {
+        sound.click()
         // Buttons that act immediately (like hiring) also deselect the current tool,
         // so the next click on the map doesn't accidentally build something.
         if (it.action) it.action()
@@ -187,6 +202,18 @@ export function createHud(
   root
     .querySelectorAll<HTMLElement>('[data-speed]')
     .forEach((b) => (b.onclick = () => act.speed(+b.dataset.speed!)))
+  const soundBtn = $('#b-sound')
+  const syncSound = () => (soundBtn.textContent = sound.muted ? 'Sound off' : 'Sound on')
+  syncSound()
+  soundBtn.onclick = () => {
+    sound.toggle()
+    syncSound()
+    sound.click()
+  }
+  const goalText = $('#g-text'),
+    goalBar = $('#g-bar'),
+    goalRw = $('#g-rw'),
+    goalEl = $('#goal')
   $('#b-save').onclick = () => {
     act.save()
     toast('Game saved')
@@ -216,6 +243,16 @@ export function createHud(
       syncActive()
     },
     toast,
+    /** A "+$" that rises from a screen position and fades out. */
+    floatText(x: number, y: number, text: string) {
+      const f = document.createElement('div')
+      f.className = 'float'
+      f.textContent = text
+      f.style.left = x + 'px'
+      f.style.top = y + 'px'
+      f.onanimationend = () => f.remove()
+      root.append(f)
+    },
     showAnimal(a: Animal | null, x: number, y: number) {
       if (!a) {
         hoverEl.classList.remove('on')
@@ -228,6 +265,14 @@ export function createHud(
     },
     update(spd: number) {
       speed = spd
+      const cg = game.currentGoal
+      goalEl.style.display = cg ? '' : 'none'
+      if (cg) {
+        set(goalText, cg.goal.text)
+        const pct = Math.min(100, (cg.value / cg.target) * 100) + '%'
+        if (goalBar.style.width !== pct) goalBar.style.width = pct
+        set(goalRw, `${Math.min(cg.value, cg.target)} / ${cg.target}  ·  Reward ${fmt(cg.goal.reward)}`)
+      }
       const hrs = Math.floor((game.time * 24 + 6) % 24),
         mins = Math.floor((game.time * 24 * 60) % 60)
       set(clock, `Day ${game.day}  ·  ${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`)

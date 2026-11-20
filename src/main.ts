@@ -8,6 +8,8 @@ import { animateRig } from './entities/models'
 import { createEnvironment } from './world/environment'
 import { createHud } from './ui/hud'
 import { makeThumbnails } from './ui/thumbs'
+import { sound } from './ui/sound'
+import { lampMat } from './entities/props'
 
 const game = new Game()
 if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game // for debugging in the console
@@ -134,7 +136,18 @@ const hud = createHud(game, makeThumbnails(), {
   save: () => game.save(),
   reset: () => game.reset(),
 })
-game.onMessage = (m) => hud.toast(m)
+game.onMessage = (m) => {
+  hud.toast(m)
+  if (/^(not enough|clear the building|something is already|buildings go|animals need)/i.test(m))
+    sound.error()
+}
+game.onSound = (n) => (n === 'goal' ? sound.goal() : sound.build())
+const proj = new THREE.Vector3()
+game.onIncome = (x, z, amount) => {
+  proj.set(x, 1.1, z).project(camera)
+  hud.floatText((proj.x * 0.5 + 0.5) * innerWidth, (-proj.y * 0.5 + 0.5) * innerHeight, '+$' + amount)
+  sound.coin()
+}
 if (!loaded) hud.toast('Build a path from the gate, add an enclosure, then buy an animal.')
 
 // ---------- input ----------
@@ -172,6 +185,7 @@ function use(t: { x: number; y: number }, drag: boolean) {
   else if (tool === 'clear') game.paint(t.x, t.y, T_GRASS)
   else if (drag) return
   else if (tool === 'feed') game.feedAt(t.x, t.y)
+  else if (tool.startsWith('b:')) game.placeProp(tool.slice(2), t.x, t.y)
   else if (tool.startsWith('a:'))
     game.buyAnimal(
       SPECIES.find((s) => 'a:' + s.id === tool)!,
@@ -248,6 +262,7 @@ function frame() {
   if (elev < 0) sun.position.set(-sunDir.x * 60, 60, 25) // moonlight comes from the opposite side
   sun.intensity = elev > 0 ? Math.min(1, elev * 4) * 3.2 : (1 - dayK) * 0.9
   sun.color.setHSL(elev > 0 ? 0.1 : 0.62, elev < 0.3 ? (elev > 0 ? 0.75 : 0.5) : 0.15, elev > 0 ? 0.9 : 0.75)
+  lampMat.emissiveIntensity = (1 - dayK) * 3
   hemi.intensity = 0.7 - dayK * 0.2
   hemi.color.setHSL(0.58, 0.6, 0.6 + dayK * 0.3)
   env.update(real, elev, sunDir, camera.position)

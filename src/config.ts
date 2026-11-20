@@ -12,6 +12,8 @@ export const BOOTH = { x: ENTRANCE.x + 1, y: ENTRANCE.y - 1 }
 /** Tiles the player can't build on or remove. */
 export const isFixed = (x: number, y: number) =>
   (x === ENTRANCE.x && y === ENTRANCE.y) || (x === DESK.x && y === DESK.y) || (x === BOOTH.x && y === BOOTH.y)
+export const FOOD_PRICE = 8 // what a hungry guest pays at a food stand
+export const GIFT_PRICE = 14 // base souvenir spend, scales with guest satisfaction
 export const KEEPER_WAGE = 25
 export const KEEPER_COST = 150
 export const DAY_LENGTH = 150 // seconds

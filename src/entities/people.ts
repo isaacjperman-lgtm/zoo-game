@@ -3,6 +3,7 @@ import { ENTRANCE, toWorld, toTile } from '../config'
 import { SPECIES } from '../data/species'
 import { personModel } from './models'
 import type { Animal } from './animal'
+import type { Prop } from '../game'
 
 abstract class Walker {
   group: THREE.Group
@@ -57,7 +58,7 @@ abstract class Walker {
   }
 }
 
-export type VisitorState = 'queue' | 'register' | 'walking' | 'watching' | 'leaving'
+export type VisitorState = 'queue' | 'register' | 'walking' | 'watching' | 'using' | 'leaving'
 
 export class Visitor extends Walker {
   state: VisitorState = 'queue'
@@ -69,6 +70,13 @@ export class Visitor extends Walker {
   waited = 0
   favorite = SPECIES[(Math.random() * SPECIES.length) | 0].id
   visited = new Set<Animal>()
+  /** Needs grow while touring; past a threshold the guest looks for a food stand or restroom. */
+  food = Math.random() * 30
+  bladder = Math.random() * 30
+  complained = new Set<string>()
+  /** Building they are walking to or using (food stand, restroom, gift shop). */
+  errand: Prop | null = null
+  shopped = false
   focus: Animal | null = null
   lane = (Math.random() - 0.5) * 0.3
   constructor() {

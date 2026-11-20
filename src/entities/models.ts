@@ -389,50 +389,77 @@ function kangaroo(s: Species) {
   const g = new THREE.Group(),
     legs: Limb[] = [],
     k = s.size * 1.6,
-    belly = s.accent
-  // upright body leaning forward
-  const body = add(g, new THREE.CapsuleGeometry(k * 0.22, k * 0.42, 4, 8), s.color, 0, k * 0.78, 0)
-  body.rotation.x = 0.35
-  add(g, new THREE.SphereGeometry(k * 0.16, 8, 8), belly, 0, k * 0.72, k * 0.1).scale.set(1, 1.3, 0.7)
-  // powerful hind legs that move together, with long feet
+    belly = s.accent,
+    dark = 0xa86a3c
+  // pear-shaped body: big haunches, a narrower torso leaning forward, a pale belly
+  add(g, new THREE.SphereGeometry(k * 0.24, 10, 8), s.color, 0, k * 0.62, -k * 0.1).scale.set(1, 1.1, 1.25)
+  const torso = add(g, new THREE.CapsuleGeometry(k * 0.19, k * 0.38, 4, 8), s.color, 0, k * 0.96, k * 0.06)
+  torso.rotation.x = 0.45
+  add(g, new THREE.SphereGeometry(k * 0.15, 8, 8), belly, 0, k * 0.8, k * 0.16).scale.set(0.9, 1.25, 0.5)
+
+  // hind legs: thigh forward to the knee, shin back to the ankle, long foot flat on the ground
   for (const sx of [-1, 1]) {
     const leg = new THREE.Group()
-    leg.position.set(sx * k * 0.15, k * 0.5, -k * 0.05)
-    add(leg, new THREE.CylinderGeometry(k * 0.1, k * 0.06, k * 0.4, 6), s.color, 0, -k * 0.2, 0)
-    add(leg, new THREE.BoxGeometry(k * 0.1, k * 0.05, k * 0.4), s.color, 0, -k * 0.44, k * 0.1)
+    leg.position.set(sx * k * 0.15, k * 0.62, -k * 0.06)
+    const thigh = add(
+      leg,
+      new THREE.CylinderGeometry(k * 0.12, k * 0.075, k * 0.29, 7),
+      s.color,
+      0,
+      -k * 0.13,
+      k * 0.06,
+    )
+    thigh.rotation.x = -0.43
+    const shin = add(
+      leg,
+      new THREE.CylinderGeometry(k * 0.06, k * 0.045, k * 0.32, 6),
+      dark,
+      0,
+      -k * 0.41,
+      k * 0.07,
+    )
+    shin.rotation.x = 0.32
+    add(leg, new THREE.BoxGeometry(k * 0.1, k * 0.06, k * 0.4), dark, 0, -k * 0.57, k * 0.17)
     g.add(leg)
     legs.push({ o: leg, phase: 0, k: 1 })
-    const arm = add(
-      g,
-      new THREE.CylinderGeometry(k * 0.035, k * 0.03, k * 0.22, 5),
-      s.color,
-      sx * k * 0.17,
-      k * 0.88,
-      k * 0.17,
-    )
-    arm.rotation.x = 0.7
+    // small forearms held in front of the chest
+    const arm = new THREE.Group()
+    arm.position.set(sx * k * 0.14, k * 1.08, k * 0.22)
+    arm.rotation.x = -0.5
+    add(arm, new THREE.CylinderGeometry(k * 0.035, k * 0.028, k * 0.2, 5), s.color, 0, -k * 0.09, 0)
+    add(arm, new THREE.SphereGeometry(k * 0.04, 6, 6), dark, 0, -k * 0.2, 0)
+    g.add(arm)
   }
+
+  // head with a long snout and tall, rounded ears
   const h = new THREE.Group()
-  h.position.set(0, k * 1.2, k * 0.2)
-  add(h, new THREE.SphereGeometry(k * 0.13, 8, 8), s.color)
-  add(h, new THREE.BoxGeometry(k * 0.12, k * 0.1, k * 0.18), belly, 0, -k * 0.03, k * 0.13)
-  add(h, new THREE.SphereGeometry(k * 0.025, 6, 6), 0x111111, 0, -k * 0.01, k * 0.22)
+  h.position.set(0, k * 1.4, k * 0.3)
+  h.rotation.x = 0.2
+  add(h, new THREE.SphereGeometry(k * 0.12, 9, 8), s.color)
+  const snout = add(h, new THREE.ConeGeometry(k * 0.075, k * 0.24, 7), belly, 0, -k * 0.035, k * 0.15)
+  snout.rotation.x = Math.PI / 2
+  add(h, new THREE.SphereGeometry(k * 0.03, 6, 6), 0x1a1a1a, 0, -k * 0.01, k * 0.27)
   for (const sx of [-1, 1]) {
-    add(h, new THREE.SphereGeometry(k * 0.022, 6, 6), 0x111111, sx * k * 0.09, k * 0.03, k * 0.09)
-    const ear = add(
+    add(h, new THREE.SphereGeometry(k * 0.022, 6, 6), 0x111111, sx * k * 0.085, k * 0.03, k * 0.07)
+    const ear = add(h, new THREE.SphereGeometry(k * 0.06, 7, 7), s.color, sx * k * 0.075, k * 0.21, -k * 0.04)
+    ear.scale.set(0.75, 1.9, 0.4)
+    ear.rotation.z = -sx * 0.25
+    const inner = add(
       h,
-      new THREE.ConeGeometry(k * 0.045, k * 0.24, 5),
-      s.color,
-      sx * k * 0.07,
+      new THREE.SphereGeometry(k * 0.04, 6, 6),
+      0xe9b9a0,
+      sx * k * 0.075,
       k * 0.2,
-      -k * 0.02,
+      -k * 0.015,
     )
-    ear.rotation.z = -sx * 0.2
+    inner.scale.set(0.5, 1.7, 0.2)
+    inner.rotation.z = -sx * 0.25
   }
   g.add(h)
-  // thick tail dragging behind
-  const tail = add(g, new THREE.ConeGeometry(k * 0.12, k * 0.8, 7), s.color, 0, k * 0.28, -k * 0.38)
-  tail.rotation.x = -1.3
+
+  // thick tail sweeping down to the ground behind
+  const tail = add(g, new THREE.ConeGeometry(k * 0.11, k * 0.82, 7), s.color, 0, k * 0.38, -k * 0.56)
+  tail.rotation.x = -1.99
   g.userData.rig = { legs, speed: 8, amp: 0, hop: true } satisfies Rig
   return g
 }
@@ -440,45 +467,80 @@ function kangaroo(s: Species) {
 function flamingo(s: Species) {
   const g = new THREE.Group(),
     legs: Limb[] = [],
-    k = s.size * 1.7
-  const body = add(g, new THREE.SphereGeometry(k * 0.3, 10, 8), s.color, 0, k * 1.1, 0)
-  body.scale.set(0.75, 0.8, 1.2)
-  add(g, new THREE.ConeGeometry(k * 0.16, k * 0.4, 6), s.color, 0, k * 1.12, -k * 0.38).rotation.x =
-    -Math.PI / 2 - 0.2
-  // thin legs, and a curved neck ending in a hooked beak
+    k = s.size * 1.7,
+    wing = 0xe0587f,
+    leg = 0xe85d84
+  // plump body with folded wings and black flight feathers
+  add(g, new THREE.SphereGeometry(k * 0.3, 10, 8), s.color, 0, k * 1.1, 0).scale.set(0.72, 0.82, 1.25)
+  add(g, new THREE.ConeGeometry(k * 0.15, k * 0.38, 6), wing, 0, k * 1.12, -k * 0.42).rotation.x =
+    -Math.PI / 2 - 0.15
   for (const sx of [-1, 1]) {
-    const leg = new THREE.Group()
-    leg.position.set(sx * k * 0.08, k * 0.95, 0)
-    add(leg, new THREE.CylinderGeometry(k * 0.018, k * 0.015, k * 0.95, 5), 0xe85d84, 0, -k * 0.47, 0)
-    add(leg, new THREE.BoxGeometry(k * 0.1, k * 0.015, k * 0.14), 0xe85d84, 0, -k * 0.94, k * 0.04)
-    g.add(leg)
-    legs.push({ o: leg, phase: sx > 0 ? 0 : Math.PI, k: 1 })
+    add(g, new THREE.SphereGeometry(k * 0.26, 8, 8), wing, sx * k * 0.17, k * 1.13, -k * 0.02).scale.set(
+      0.3,
+      0.7,
+      1.15,
+    )
+    add(g, new THREE.BoxGeometry(k * 0.05, k * 0.05, k * 0.2), 0x2a2a2a, sx * k * 0.19, k * 1.07, -k * 0.34)
   }
-  const neck = new THREE.Group()
-  neck.position.set(0, k * 1.2, k * 0.26)
-  neck.rotation.x = 0.35
-  add(neck, new THREE.CylinderGeometry(k * 0.035, k * 0.05, k * 0.7, 6), s.color, 0, k * 0.35, 0)
+
+  // two thin legs with a knee joint and a small webbed foot
+  for (const sx of [-1, 1]) {
+    const lg = new THREE.Group()
+    lg.position.set(sx * k * 0.08, k * 0.98, 0)
+    add(lg, new THREE.CylinderGeometry(k * 0.02, k * 0.016, k * 0.98, 5), leg, 0, -k * 0.49, 0)
+    add(lg, new THREE.SphereGeometry(k * 0.034, 6, 6), 0xc94a6e, 0, -k * 0.55, 0)
+    add(lg, new THREE.BoxGeometry(k * 0.12, k * 0.014, k * 0.17), leg, 0, -k * 0.975, k * 0.05)
+    g.add(lg)
+    legs.push({ o: lg, phase: sx > 0 ? 0 : Math.PI, k: 1 })
+  }
+
+  // S-curved neck: forward, back, then forward again to the head
+  const seg = (parent: THREE.Object3D, len: number, rot: number, r0: number, r1: number) => {
+    const grp = new THREE.Group()
+    grp.rotation.x = rot
+    add(grp, new THREE.CylinderGeometry(r1, r0, len, 6), s.color, 0, len / 2, 0)
+    const tip = new THREE.Group()
+    tip.position.y = len
+    grp.add(tip)
+    parent.add(grp)
+    return tip
+  }
+  const root = new THREE.Group()
+  root.position.set(0, k * 1.2, k * 0.26)
+  g.add(root)
+  let t3: THREE.Object3D = root
+  // each short piece bends a little from the one below, tracing an S
+  const bends = [0.75, -0.3, -0.4, -0.4, -0.2, 0.35, 0.5, 0.45]
+  bends.forEach((rot, i) => {
+    const r = k * (0.052 - i * 0.002)
+    t3 = seg(t3, k * 0.13, rot, r, r - k * 0.002)
+  })
+  // head with a pale, downward-bent beak that ends in a black tip
   const head = new THREE.Group()
-  head.position.set(0, k * 0.72, k * 0.04)
-  add(head, new THREE.SphereGeometry(k * 0.07, 8, 8), s.color)
-  const beak = add(head, new THREE.ConeGeometry(k * 0.04, k * 0.2, 5), s.accent, 0, -k * 0.03, k * 0.12)
-  beak.rotation.x = Math.PI / 2 + 0.5
+  t3.add(head)
+  add(head, new THREE.SphereGeometry(k * 0.07, 8, 8), s.color, 0, k * 0.03, 0)
+  add(head, new THREE.ConeGeometry(k * 0.05, k * 0.14, 6), 0xf6d9d9, 0, k * 0.02, k * 0.1).rotation.x =
+    Math.PI / 2
+  add(head, new THREE.ConeGeometry(k * 0.04, k * 0.12, 6), 0x1c1c1c, 0, -k * 0.035, k * 0.18).rotation.x =
+    Math.PI / 2 + 0.9
   for (const sx of [-1, 1])
-    add(head, new THREE.SphereGeometry(k * 0.015, 5, 5), 0x111111, sx * k * 0.045, k * 0.02, k * 0.045)
-  neck.add(head)
-  g.add(neck)
+    add(head, new THREE.SphereGeometry(k * 0.016, 5, 5), 0x111111, sx * k * 0.055, k * 0.05, k * 0.03)
+
   g.userData.rig = { legs, speed: 7, amp: 0 } satisfies Rig
   return g
 }
 
+/** Species with their own hand-built model. Anything not listed here falls back to the generic quadruped. */
+const CUSTOM_MODELS: Record<string, (s: Species) => THREE.Group> = {
+  penguin,
+  panda,
+  monkey,
+  kangaroo,
+  flamingo,
+}
+
 export function animalModel(s: Species) {
-  return s.id === 'penguin'
-    ? penguin(s)
-    : s.id === 'panda'
-      ? panda(s)
-      : s.id === 'monkey'
-        ? monkey(s)
-        : quadruped(s)
+  return (CUSTOM_MODELS[s.id] ?? quadruped)(s)
 }
 
 const SKINS = [0xf1c9a5, 0xd9a47a, 0xb97a52, 0x8a5a3a, 0xf6d7bd]

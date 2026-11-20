@@ -9,7 +9,7 @@ import { createEnvironment } from './world/environment'
 import { createHud } from './ui/hud'
 import { makeThumbnails } from './ui/thumbs'
 import { sound } from './ui/sound'
-import { lampMat, stageLightMat } from './entities/props'
+import { lampMat, lampGlowMat, stageLightMat } from './entities/props'
 import type { Animal } from './entities/animal'
 import type { Keeper } from './entities/people'
 
@@ -386,6 +386,35 @@ let saveT = 0
 const sunDir = new THREE.Vector3(),
   fwd = new THREE.Vector3(),
   up = new THREE.Vector3(0, 1, 0)
+// ---------- lamp light ----------
+// Every lamp paints a glow on the ground (cheap, always on at night); the few nearest the camera also get a real
+// point light, so animals, guests and trees around them are lit too.
+const LAMP_LIGHTS = 8
+const lampLights = Array.from({ length: LAMP_LIGHTS }, () => {
+  const l = new THREE.PointLight(0xffc880, 0, 9, 1.6)
+  scene.add(l)
+  return l
+})
+function updateLampLight(night: number) {
+  lampGlowMat.opacity = night * 0.65
+  const lamps = [...game.props.values()].filter((p) => p.id === 'lamp')
+  const c = controls.target
+  lamps.sort(
+    (a, b) =>
+      Math.hypot(a.group.position.x - c.x, a.group.position.z - c.z) -
+      Math.hypot(b.group.position.x - c.x, b.group.position.z - c.z),
+  )
+  lampLights.forEach((l, i) => {
+    const lamp = lamps[i]
+    if (!lamp || night < 0.02) {
+      l.intensity = 0
+      return
+    }
+    l.position.set(lamp.group.position.x, 1.5, lamp.group.position.z)
+    l.intensity = night * 6
+  })
+}
+
 // ---------- weather ----------
 const RAIN = 3200
 const rainPos = new Float32Array(RAIN * 6)
@@ -487,6 +516,7 @@ function frame() {
   sun.intensity = elev > 0 ? Math.min(1, elev * 4) * 3.2 : (1 - dayK) * 0.9
   sun.color.setHSL(elev > 0 ? 0.1 : 0.62, elev < 0.3 ? (elev > 0 ? 0.75 : 0.5) : 0.15, elev > 0 ? 0.9 : 0.75)
   lampMat.emissiveIntensity = (1 - dayK) * 3
+  updateLampLight(1 - dayK)
   hemi.intensity = 0.7 - dayK * 0.2
   hemi.color.setHSL(0.58, 0.6, 0.6 + dayK * 0.3)
   updateWeather(real)

@@ -8,6 +8,30 @@ export const lampMat = new THREE.MeshStandardMaterial({
   emissiveIntensity: 0,
 })
 
+/** A soft round gradient, built from raw pixels so it also works outside a browser (tests). */
+function glowTexture() {
+  const n = 64
+  const data = new Uint8Array(n * n * 4)
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const r = Math.hypot(x - n / 2 + 0.5, y - n / 2 + 0.5) / (n / 2)
+      const a = Math.max(0, 1 - r) ** 2
+      data.set([255, 196, 112, Math.round(a * 255)], (y * n + x) * 4)
+    }
+  const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat)
+  t.colorSpace = THREE.SRGBColorSpace
+  t.needsUpdate = true
+  return t
+}
+/** The pool of light a lamp casts on the ground. Shared by every lamp; main.ts raises its opacity at night. */
+export const lampGlowMat = new THREE.MeshBasicMaterial({
+  map: glowTexture(),
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+})
+
 /** Stage spotlights share one material so main.ts can switch them on while a show is running. */
 export const stageLightMat = new THREE.MeshStandardMaterial({
   color: 0xfff0b0,
@@ -185,6 +209,18 @@ export function propModel(id: string) {
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), lampMat)
       head.position.y = 1.36
       g.add(head)
+      // a little hood over the bulb, with a collar below it and a knob on top
+      cyl(g, 0.07, 0.05, 0.05, 0x2c2f33, 0, 1.27, 0, 10)
+      const shade = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.14, 12), mat(0x3d6b4a))
+      shade.position.y = 1.52
+      shade.castShadow = true
+      g.add(shade)
+      ball(g, 0.03, 0x2c2f33, 0, 1.62, 0)
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), lampGlowMat)
+      pool.rotation.x = -Math.PI / 2
+      pool.position.y = 0.07
+      pool.renderOrder = 2
+      g.add(pool)
       break
     }
   }

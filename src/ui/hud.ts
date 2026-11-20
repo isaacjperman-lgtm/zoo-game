@@ -1,3 +1,4 @@
+import { moodFace } from '../ai/reviews'
 import { COSTS, KEEPER_COST, KEEPER_WAGE } from '../config'
 import type { Game } from '../game'
 import type { Animal } from '../entities/animal'
@@ -61,6 +62,7 @@ export function createHud(
         <button data-speed="3" title="Faster (3)">3×</button>
         <span class="divider"></span>
         <button id="b-sound" title="Sound effects"></button>
+        <button id="b-reviews" title="What guests think of the zoo">Reviews</button>
         <button id="b-save">Save</button><button id="b-reset" class="danger">New game</button>
       </div>
     </header>
@@ -91,16 +93,65 @@ export function createHud(
     <div class="bars"></div>
     <dl class="facts"></dl>
     <div class="issues"></div>
-    <button class="feedbtn"></button>`
+    <button class="feedbtn"></button>
+    <button class="sellbtn"></button>`
   root.append(card)
   const cardName = card.querySelector<HTMLInputElement>('.name')!
   const cardBars = card.querySelector<HTMLElement>('.bars')!
   const cardFacts = card.querySelector<HTMLElement>('.facts')!
   const cardIssues = card.querySelector<HTMLElement>('.issues')!
   const cardFeed = card.querySelector<HTMLButtonElement>('.feedbtn')!
+  const cardSell = card.querySelector<HTMLButtonElement>('.sellbtn')!
+  // ---- guest feedback panel ----
+  const rpanel = document.createElement('aside')
+  rpanel.className = 'panel rpanel'
+  rpanel.innerHTML = `<button class="close" title="Close">×</button><div class="rhead"></div><div class="tags"></div><div class="rlist"></div>`
+  root.append(rpanel)
+  const rHead = rpanel.querySelector<HTMLElement>('.rhead')!
+  const rTags = rpanel.querySelector<HTMLElement>('.tags')!
+  const rList = rpanel.querySelector<HTMLElement>('.rlist')!
+  let shownKey = ''
+  const toggleReviews = (on = !rpanel.classList.contains('on')) => {
+    rpanel.classList.toggle('on', on)
+    shownKey = ''
+  }
+  rpanel.querySelector<HTMLElement>('.close')!.onclick = () => toggleReviews(false)
+  function renderReviews() {
+    const rs = game.reviews
+    const last = rs[rs.length - 1]
+    const key = rs.length + ':' + (last?.text ?? '') + ':' + Math.round(game.guestMood)
+    if (!rpanel.classList.contains('on') || key === shownKey) return
+    shownKey = key
+    const mood = Math.round(game.guestMood)
+    rHead.innerHTML = `<span class="face">${moodFace(mood)}</span><div><b>Guest opinion: ${mood}%</b><div class="status">${rs.length ? `Based on the last ${rs.length} guest${rs.length === 1 ? '' : 's'}` : 'No guests have left yet'}</div></div>`
+    const tally = new Map<string, number>()
+    for (const r of rs) for (const t of r.tags) tally.set(t, (tally.get(t) ?? 0) + 1)
+    const top = [...tally].sort((a, b) => b[1] - a[1]).slice(0, 4)
+    rTags.innerHTML = top.length
+      ? `<div class="lbl">Top complaints</div>` +
+        top.map(([t, n]) => `<span class="chip">${esc(t)} <b>×${n}</b></span>`).join('')
+      : rs.length
+        ? '<div class="lbl">No common complaints. Nice work!</div>'
+        : ''
+    rList.innerHTML = [...rs]
+      .reverse()
+      .slice(0, 14)
+      .map(
+        (r) =>
+          `<div class="rev"><span class="face">${moodFace(r.score)}</span><div><div class="rtext">“${esc(r.text)}”</div><div class="status">Day ${r.day} · ${r.score}% happy</div></div></div>`,
+      )
+      .join('')
+  }
+  $('#b-reviews').onclick = () => {
+    sound.click()
+    toggleReviews()
+  }
+
   let selected: Animal | null = null
+  let sellArmed = 0 // timestamp until which the next click on Sell confirms
   function select(a: Animal | null) {
     selected = a
+    sellArmed = 0
     card.classList.toggle('on', !!a)
     if (!a) return
     cardName.value = a.name
@@ -123,6 +174,13 @@ export function createHud(
   }
   card.querySelector<HTMLElement>('.close')!.onclick = () => select(null)
   cardFeed.onclick = () => selected && game.feed(selected)
+  cardSell.onclick = () => {
+    if (!selected) return
+    if (Date.now() < sellArmed) {
+      game.sellAnimal(selected) // the card closes itself on the next update
+      sellArmed = 0
+    } else sellArmed = Date.now() + 3000
+  }
   function updateCard(a: Animal) {
     const reg = game.region(a.tx, a.ty)
     const mates = game.animals.filter((o) => reg.some((r) => r[0] === o.tx && r[1] === o.ty))
@@ -148,6 +206,10 @@ export function createHud(
     cardIssues.style.display = a.issues.length ? '' : 'none'
     set(cardFeed, a.hunger > 5 ? `Feed ${a.name} (${fmt(a.species.feedCost)})` : `${a.name} is full`)
     cardFeed.disabled = a.hunger <= 5
+    const sale = fmt(Math.floor(a.species.cost / 2))
+    const armed = Date.now() < sellArmed
+    set(cardSell, armed ? `Click again to sell for ${sale}` : `Sell for ${sale}`)
+    cardSell.classList.toggle('armed', armed)
   }
 
   let tool = 'path',
@@ -341,6 +403,7 @@ export function createHud(
       speed = spd
       if (selected && !game.animals.includes(selected)) select(null) // sold or lost its pen
       if (selected) updateCard(selected)
+      renderReviews()
       const cg = game.currentGoal
       goalEl.style.display = cg ? '' : 'none'
       if (cg) {

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { Game } from '../game'
 import type { Animal } from '../entities/animal'
-import { toWorld, toTile } from '../config'
+import { toWorld, toTile, T_PEN } from '../config'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -12,6 +12,20 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  */
 export function updateAnimal(g: Game, a: Animal, dt: number) {
   const sp = a.species
+  // Straight-line walks can clip the corner of a bent pen. If an animal ever ends up off its pen, walk it back.
+  if (g.tile(a.tx, a.ty) === T_PEN) a.lastPen = { x: a.tx, y: a.ty }
+  else {
+    const p = a.group.position
+    const home = new THREE.Vector3(toWorld(a.lastPen.x), 0.05, toWorld(a.lastPen.y))
+    const d = home.clone().sub(p)
+    const step = 0.8 * dt
+    if (d.length() <= step) p.copy(home)
+    else p.addScaledVector(d.normalize(), step)
+    a.tx = toTile(p.x)
+    a.ty = toTile(p.z)
+    a.target = null
+    return
+  }
   const reg = g.region(a.tx, a.ty)
   const inPen = g.animals.filter((o) => reg.some((r) => r[0] === o.tx && r[1] === o.ty))
   const same = inPen.filter((o) => o.species === sp).length
@@ -73,8 +87,16 @@ export function updateAnimal(g: Game, a: Animal, dt: number) {
       }
     } else {
       d.normalize()
-      p.x += d.x * step
-      p.z += d.z * step
+      const nx = p.x + d.x * step
+      const nz = p.z + d.z * step
+      if (g.tile(toTile(nx), toTile(nz)) !== T_PEN) {
+        // the straight line leaves the pen (a bent enclosure): give up on this target and pick another
+        a.target = null
+        a.wait = 0.2
+        return
+      }
+      p.x = nx
+      p.z = nz
       a.group.rotation.y = Math.atan2(d.x, d.z)
     }
     a.tx = toTile(p.x)
@@ -98,6 +120,7 @@ function pickTarget(g: Game, a: Animal, reg: number[][]) {
     }
   }
   const r = tiles[(Math.random() * tiles.length) | 0]
+  if (!r) return null
   return new THREE.Vector3(
     toWorld(r[0]) + (Math.random() - 0.5) * 0.6,
     0.05,

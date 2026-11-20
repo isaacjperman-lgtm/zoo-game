@@ -38,6 +38,8 @@ export class Animal {
   status: AnimalStatus = 'wandering'
   /** Short reasons the animal is unhappy, shown on hover. */
   issues: string[] = []
+  /** Last tile this animal stood on that was actually enclosure, to return to if it ever strays. */
+  lastPen: { x: number; y: number }
   tx: number
   ty: number
   target: THREE.Vector3 | null = null
@@ -49,6 +51,7 @@ export class Animal {
     x: number,
     y: number,
   ) {
+    this.lastPen = { x, y }
     this.tx = x
     this.ty = y
     this.group = animalModel(species)

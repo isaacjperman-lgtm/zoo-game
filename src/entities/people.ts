@@ -102,6 +102,11 @@ export class Visitor extends Walker {
   /** Building they are walking to or using (food stand, restroom, gift shop). */
   errand: Prop | null = null
   shopped = false
+  /** Things they noticed, used to write their review on the way out. */
+  sawSad = 0
+  sawHappy = 0
+  scenery = 0
+  ateFood = false
   focus: Animal | null = null
   lane = (Math.random() - 0.5) * 0.3
   constructor() {

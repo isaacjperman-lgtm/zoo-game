@@ -31,6 +31,7 @@ import { BUILDINGS } from './data/buildings'
 import { propModel } from './entities/props'
 import { GOALS } from './goals'
 import type { Species } from './data/species'
+import type { Review } from './ai/reviews'
 
 export interface Prop {
   id: string
@@ -62,6 +63,8 @@ export class Game {
   onMessage = (_m: string) => {}
   /** Fired whenever guests pay, with the world position of the payment. */
   onIncome = (_x: number, _z: number, _amount: number) => {}
+  /** What each guest told the zoo on the way out (newest last), shown in the Reviews panel. */
+  reviews: Review[] = []
   onSound = (_name: 'build' | 'hire' | 'goal') => {}
 
   constructor() {
@@ -271,6 +274,17 @@ export class Game {
     this.root.add(a.group)
   }
 
+  /** Sell an animal for half its price. */
+  sellAnimal(a: Animal) {
+    const i = this.animals.indexOf(a)
+    if (i < 0) return
+    this.animals.splice(i, 1)
+    this.root.remove(a.group)
+    this.money += Math.floor(a.species.cost / 2)
+    this.onSound('build')
+    this.onMessage(`Sold ${a.name} for $${Math.floor(a.species.cost / 2)}`)
+  }
+
   hireKeeper() {
     if (this.money < KEEPER_COST) return this.onMessage('Not enough money!')
     this.money -= KEEPER_COST
@@ -346,6 +360,11 @@ export class Game {
     }
   }
 
+  addReview(v: Visitor, r: Review) {
+    this.reviews.push(r)
+    if (this.reviews.length > 40) this.reviews.shift()
+  }
+
   /** Departing guests nudge the average guest mood, which counts toward the zoo rating. */
   recordGuestMood(m: number) {
     this.guestMood += (m - this.guestMood) * 0.15
@@ -376,6 +395,7 @@ export class Game {
         goal: this.goalIndex,
         guests: this.totalVisitors,
         mood: this.guestMood,
+        reviews: this.reviews,
       }),
     )
   }
@@ -394,6 +414,7 @@ export class Game {
       this.goalIndex = d.goal ?? 0
       this.totalVisitors = d.guests ?? 0
       this.guestMood = d.mood ?? 70
+      this.reviews = d.reviews ?? []
       for (const p of d.props ?? []) this.addProp(p.id, p.x, p.y)
       this.orientProps()
       if (!d.gates) this.autoGates() // old saves predate gates

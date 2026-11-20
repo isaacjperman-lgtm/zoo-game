@@ -592,7 +592,93 @@ button.danger:hover {
 .acard .feedbtn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.16);
 }
+.acard .sellbtn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--red);
+  background: transparent;
+  border: 1px solid rgba(236, 112, 99, 0.4);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.acard .sellbtn:hover,
+.acard .sellbtn.armed {
+  color: #fff;
+  background: rgba(236, 112, 99, 0.55);
+}
 .acard .feedbtn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.rpanel {
+  position: fixed;
+  left: 14px;
+  top: 204px;
+  width: 280px;
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
+  padding: 14px;
+  opacity: 0;
+  transform: translateX(-14px);
+  pointer-events: none;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+.rpanel.on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.rpanel .close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+.rhead,
+.rev {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.rhead .face {
+  font-size: 30px;
+}
+.rev {
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.rev .face {
+  font-size: 20px;
+}
+.rtext {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.tags {
+  margin: 10px 0 4px;
+  font-size: 11.5px;
+}
+.tags .lbl {
+  margin-bottom: 5px;
+  color: var(--muted);
+}
+.chip {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--red);
+  background: rgba(236, 112, 99, 0.14);
+  font-weight: 700;
 }

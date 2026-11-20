@@ -2,6 +2,7 @@ import type { Game } from '../game'
 import { Visitor } from '../entities/people'
 import { ADMISSION, FOOD_PRICE, GIFT_PRICE, DESK, ENTRANCE, N, T_PATH, toWorld } from '../config'
 import { reachable } from '../world/pathfinding'
+import { writeReview } from './reviews'
 
 const QUEUE_SPACING = 0.55
 
@@ -45,8 +46,16 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
           g.queue.splice(slot, 1)
           v.state = 'leaving'
           v.path = [{ x: ENTRANCE.x, y: N + 9 }]
+          g.addReview(v, {
+            ...writeReview(g, v),
+            text: 'Gave up waiting for a ticket',
+            tags: ['Long entrance queue'],
+          })
         }
       } else {
+        // the ticket is paid for the moment they reach the booth, not when they leave
+        g.earn(ADMISSION, v.group.position.x, v.group.position.z)
+        g.totalVisitors++
         v.state = 'register'
         v.timer = 2 + Math.random() * 1.5
         v.face(toWorld(DESK.x) + 1, toWorld(DESK.y)) // clerk is in the booth to the east
@@ -55,8 +64,6 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
     }
     case 'register':
       if ((v.timer -= dt) <= 0) {
-        g.earn(ADMISSION, v.group.position.x, v.group.position.z)
-        g.totalVisitors++
         v.satisfaction -= Math.max(0, v.waited - 10) / 5 // long waits annoy people
         g.queue.splice(g.queue.indexOf(v), 1)
         planNext(g, v)
@@ -84,7 +91,11 @@ function updateVisitor(g: Game, v: Visitor, dt: number) {
       if (a && g.animals.includes(a)) {
         const joy = a.happiness * (a.status === 'sleeping' ? 0.5 : 1)
         v.satisfaction += (joy - 50) / 8 + (a.species.id === v.favorite ? 4 : 0)
-        v.satisfaction += Math.min(4, g.decorNear(v.px, v.py)) // pleasant scenery
+        const deco = g.decorNear(v.px, v.py)
+        v.satisfaction += Math.min(4, deco) // pleasant scenery
+        v.scenery += Math.min(4, deco)
+        if (joy < 40) v.sawSad++
+        else if (joy >= 75) v.sawHappy++
         g.earn(Math.round(joy / 25), v.group.position.x, v.group.position.z) // donations
         v.visited.add(a)
       }
@@ -153,6 +164,7 @@ function finishErrand(g: Game, v: Visitor) {
   const pos = v.group.position
   if (p?.id === 'food') {
     g.earn(FOOD_PRICE, pos.x, pos.z)
+    v.ateFood = true
     v.food = 0
     v.satisfaction += 8
   } else if (p?.id === 'restroom') {
@@ -185,6 +197,7 @@ function finishTour(g: Game, v: Visitor) {
 
 function leave(g: Game, v: Visitor) {
   v.state = 'leaving'
+  g.addReview(v, writeReview(g, v))
   v.focus = null
   v.path = []
   if (g.tile(v.px, v.py) === T_PATH) {

@@ -23,7 +23,7 @@ const KEEPER_NAMES = [
   'Avery',
 ]
 import { SPECIES } from '../data/species'
-import { personModel, mat } from './models'
+import { personModel } from './models'
 import type { Animal } from './animal'
 import type { Prop } from '../game'
 
@@ -163,10 +163,10 @@ export class Visitor extends Walker {
           : new THREE.Color()
               .setHSL(Math.floor(Math.random() * 24) / 24, kind === 'child' ? 0.8 : 0.5, 0.5)
               .getHex()
-    super(personModel(shirt), 1.2 + Math.random() * 0.5)
+    super(personModel(shirt, kind), 1.2 + Math.random() * 0.5)
     this.kind = kind
     if (kind === 'child') {
-      this.group.scale.setScalar(0.72)
+      this.group.scale.setScalar(0.85)
       this.ticketFactor = 0.5
       this.priceSensitive = false
       this.stops = 3 + Math.floor(Math.random() * 2)
@@ -180,13 +180,6 @@ export class Visitor extends Walker {
     } else if (kind === 'critic') {
       this.stops = 5
       this.satisfaction = 45 // hard to impress
-      const hat = new THREE.Group()
-      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.015, 12), mat(0x1a1a1f))
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.09, 10), mat(0x1a1a1f))
-      crown.position.y = 0.05
-      hat.add(brim, crown)
-      hat.position.y = 0.7
-      this.group.add(hat)
     }
     // arrive from down the road, outside the gate
     this.group.position.set(toWorld(ENTRANCE.x) + (Math.random() - 0.5) * 1.5, 0, toWorld(ENTRANCE.y) + 10)

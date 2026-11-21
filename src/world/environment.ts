@@ -116,6 +116,28 @@ export function createEnvironment(scene: THREE.Scene) {
     n++
   }
 
+  // bushes scattered among the trees and rocks
+  const bushes = inst(new THREE.IcosahedronGeometry(0.5, 1), 90, false)
+  for (let i = 0, n = 0; n < 90 && i < 3000; i++) {
+    const a = r() * 6.28,
+      d = 24 + r() * 90,
+      x = Math.cos(a) * d,
+      z = Math.sin(a) * d
+    if (!free(x, z)) continue
+    const sc = 0.6 + r() * 0.9
+    put(
+      bushes,
+      n++,
+      x,
+      0.25 * sc,
+      z,
+      sc * 1.3,
+      sc * 0.8,
+      r() * 6,
+      col.setHSL(0.28 + r() * 0.1, 0.5, 0.22 + r() * 0.1),
+    )
+  }
+
   // ---- perimeter fence (gap at the gate) ----
   const posts = new THREE.InstancedMesh(
     new THREE.BoxGeometry(0.14, 0.85, 0.14),
@@ -126,6 +148,11 @@ export function createEnvironment(scene: THREE.Scene) {
     new THREE.BoxGeometry(1, 0.06, 0.05),
     new THREE.MeshStandardMaterial({ color: 0x2f3b34, roughness: 0.6, metalness: 0.3 }),
     8 * N,
+  )
+  const caps = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.2, 0.06, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0x7c7c70, roughness: 0.9 }),
+    4 * (N + 1),
   )
   posts.castShadow = rails.castShadow = true
   let np = 0,
@@ -139,7 +166,10 @@ export function createEnvironment(scene: THREE.Scene) {
       dummy.rotation.set(0, 0, 0)
       dummy.scale.set(1, 1, 1)
       dummy.updateMatrix()
-      posts.setMatrixAt(np++, dummy.matrix)
+      posts.setMatrixAt(np, dummy.matrix)
+      dummy.position.y = 0.88
+      dummy.updateMatrix()
+      caps.setMatrixAt(np++, dummy.matrix)
     }
     for (let i = 0; i < N; i++) {
       const c = i - half + 0.5
@@ -154,9 +184,9 @@ export function createEnvironment(scene: THREE.Scene) {
       }
     }
   }
-  posts.count = np
+  posts.count = caps.count = np
   rails.count = nr
-  scene.add(posts, rails)
+  scene.add(posts, rails, caps)
 
   // ---- entrance gate ----
   const stone = new THREE.MeshStandardMaterial({ color: 0xa8a79d, roughness: 0.95, flatShading: true })
@@ -176,8 +206,12 @@ export function createEnvironment(scene: THREE.Scene) {
     cap.position.set(px, 2.47, gz)
     const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.3, 0.28), lanternMat)
     lantern.position.set(px, 2.7, gz)
-    pillar.castShadow = cap.castShadow = true
-    scene.add(pillar, cap, lantern)
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.7), stone)
+    base.position.set(px, 0.2, gz)
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 0), stone)
+    ball.position.set(px, 2.92, gz)
+    pillar.castShadow = cap.castShadow = base.castShadow = true
+    scene.add(pillar, cap, lantern, base, ball)
     if (quality.gateLights) {
       const light = new THREE.PointLight(0xffc880, 0, 14, 2)
       light.position.set(px, 2.9, gz + 0.3)
@@ -242,6 +276,20 @@ export function createEnvironment(scene: THREE.Scene) {
   part(new THREE.BoxGeometry(0.12, 0.08, 0.96), 0x6b4a2e, -0.42, 0.62, 0) // counter
   const roof = part(new THREE.ConeGeometry(0.85, 0.45, 4), 0xb23a3a, 0, 1.33, 0)
   roof.rotation.y = Math.PI / 4
+  for (let i = 0; i < 6; i++) {
+    const a = part(
+      new THREE.BoxGeometry(0.34, 0.04, 0.16),
+      i % 2 ? 0xf4f1ea : 0xc0392b,
+      -0.55,
+      1.1 - i * 0.002,
+      -0.375 + i * 0.15,
+    )
+    a.rotation.z = -0.35 // striped awning over the counter
+  }
+  for (const sz of [-1, 1])
+    part(new THREE.CylinderGeometry(0.022, 0.022, 1.05, 5), 0x6b4a2e, -0.68, 0.52, sz * 0.42)
+  part(new THREE.CylinderGeometry(0.07, 0.06, 0.02, 8), 0xd9a441, -0.42, 0.67, 0.2) // coin dish
+  part(new THREE.BoxGeometry(0.96, 0.05, 0.96), 0x8a2f2f, 0, 1.1, 0) // roof trim
   const clerk = personModel(0x8a2d2d)
   clerk.position.set(0.12, 0.02, 0)
   clerk.rotation.y = -Math.PI / 2
@@ -321,12 +369,16 @@ export function createEnvironment(scene: THREE.Scene) {
 
   const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, fog: false })
   const clouds: THREE.Group[] = []
+  const puffGeo = new THREE.IcosahedronGeometry(1, 1)
   for (let i = 0; i < 12; i++) {
     const c = new THREE.Group()
-    for (let j = 0; j < 5; j++) {
-      const p = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), cloudMat)
-      p.position.set((j - 2) * 4 + r() * 2, r() * 1.2, r() * 3)
-      p.scale.set(3 + r() * 3, 1.6 + r() * 0.8, 2.5 + r() * 1.5)
+    const puffs = 4 + ((r() * 5) | 0)
+    for (let j = 0; j < puffs; j++) {
+      const p = new THREE.Mesh(puffGeo, cloudMat)
+      // taller puffs toward the middle of the cloud, flatter ones at the ends
+      const mid = 1 - Math.abs(j - (puffs - 1) / 2) / (puffs / 2)
+      p.position.set((j - (puffs - 1) / 2) * 3.6 + r() * 2, r() * 1.2 + mid * 1.2, r() * 3)
+      p.scale.set(2.6 + r() * 3, 1.3 + mid * 1.4 + r() * 0.6, 2.2 + r() * 1.6)
       c.add(p)
     }
     c.position.set(r() * 500 - 250, 55 + r() * 25, -260 + r() * 360)

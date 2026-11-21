@@ -21,12 +21,21 @@ export function makeThumbnails(): Record<string, string> {
   const jobs: [string, THREE.Group][] = [
     ...SPECIES.map((s) => [s.id, animalModel(s)] as [string, THREE.Group]),
     ['keeper', personModel(0x2a5db0, true)],
+    ['guest', personModel(0xc0503a, 'guest')],
+    ['child', personModel(0x44b0d0, 'child')],
+    ['teacher', personModel(0xd9a441, 'teacher')],
+    ['critic', personModel(0x2b2b33, 'critic')],
     ...BUILDINGS.map((b) => [b.id, propModel(b.id)] as [string, THREE.Group]),
   ]
   for (const [id, g] of jobs) {
     sc.add(g)
-    const box = new THREE.Box3().setFromObject(g),
-      c = box.getCenter(new THREE.Vector3()),
+    const box = new THREE.Box3()
+    g.updateWorldMatrix(true, true)
+    g.traverse((o) => {
+      // skip things like the lamp's ground glow, which would shrink the icon
+      if (!o.userData.noFrame && (o as THREE.Mesh).isMesh) box.union(new THREE.Box3().setFromObject(o))
+    })
+    const c = box.getCenter(new THREE.Vector3()),
       size = box.getSize(new THREE.Vector3())
     const dist = ((Math.max(size.x, size.y, size.z) * 0.5) / Math.tan(THREE.MathUtils.degToRad(14))) * 1.2
     cam.position.set(c.x + dist * 0.75, c.y + dist * 0.35, c.z + dist * 0.65)

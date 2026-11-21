@@ -20,7 +20,11 @@ export const isFlatColor = (m: THREE.Material) => flatMats.has(m)
 /** Merge a finished model's pieces (see bake.ts), keeping its animated limbs as separate meshes. */
 function bake(g: THREE.Group) {
   const rig = g.userData.rig as Rig | undefined
-  return bakeModel(g, isFlatColor, rig?.legs.map((l) => l.o) ?? [])
+  return bakeModel(
+    g,
+    isFlatColor,
+    [...(rig?.legs ?? []), ...(rig?.sway ?? [])].map((l) => l.o),
+  )
 }
 
 const templates = new Map<string, THREE.Group>()
@@ -43,7 +47,8 @@ function fromTemplate(key: string, build: () => THREE.Group) {
     const to: THREE.Object3D[] = []
     t.traverse((o) => from.push(o))
     c.traverse((o) => to.push(o))
-    c.userData.rig = { ...rig, legs: rig.legs.map((l) => ({ ...l, o: to[from.indexOf(l.o)] })) } satisfies Rig
+    const remap = (ls: Limb[]) => ls.map((l) => ({ ...l, o: to[from.indexOf(l.o)] }))
+    c.userData.rig = { ...rig, legs: remap(rig.legs), sway: rig.sway && remap(rig.sway) } satisfies Rig
   }
   return c
 }
@@ -64,6 +69,8 @@ interface Limb {
 }
 interface Rig {
   legs: Limb[]
+  /** Tails and the like that swish side to side, idle or moving. */
+  sway?: Limb[]
   speed: number
   amp: number
   wobble?: boolean
@@ -77,6 +84,8 @@ export function animateRig(g: THREE.Object3D, t: number, moving: boolean, dt: nu
   if (!rig) return
   rig.amp += ((moving ? 1 : 0) - rig.amp) * Math.min(1, dt * 8)
   for (const l of rig.legs) l.o.rotation.x = Math.sin(t * rig.speed + l.phase) * 0.6 * l.k * rig.amp
+  if (rig.sway)
+    for (const l of rig.sway) l.o.rotation.z = Math.sin(t * 1.8 + l.phase) * 0.3 * l.k * (0.6 + rig.amp * 0.8)
   if (rig.wobble) g.rotation.z = Math.sin(t * rig.speed) * 0.14 * rig.amp
   if (rig.hop) g.position.y = 0.05 + Math.abs(Math.sin(t * rig.speed)) * 0.22 * rig.amp
 }
@@ -100,13 +109,14 @@ function head(k: number, c: number, snout: number) {
   return h
 }
 
-function tail(g: THREE.Group, x: number, y: number, z: number, len: number, c: number, tuft?: number) {
+function tail(g: THREE.Object3D, x: number, y: number, z: number, len: number, c: number, tuft?: number) {
   const p = new THREE.Group()
   p.position.set(x, y, z)
   p.rotation.x = 0.6
   add(p, new THREE.CylinderGeometry(len * 0.04, len * 0.03, len, 5), c, 0, -len / 2, 0)
   if (tuft !== undefined) add(p, new THREE.SphereGeometry(len * 0.12, 6, 6), tuft, 0, -len, 0)
   g.add(p)
+  return p
 }
 
 function quadruped(s: Species) {
@@ -115,6 +125,8 @@ function quadruped(s: Species) {
     k = s.size,
     id = s.id
   const rand = seeded(id.length * 977 + 13)
+  const sway: Limb[] = []
+  const swish = (...a: Parameters<typeof tail>) => sway.push({ o: tail(...a), phase: rand() * 6, k: 1 })
   const dims: Record<string, number[]> = {
     // leg height, body height, body length, body width, leg radius (all x size)
     giraffe: [1.7, 0.8, 1.6, 0.72, 0.075],
@@ -198,7 +210,7 @@ function quadruped(s: Species) {
         len * (0.1 + rand() * 0.7),
         k * 0.1,
       )
-    tail(g, 0, by + bh * 0.25, -bl * 0.5, k * 0.8, s.color, s.accent)
+    swish(g, 0, by + bh * 0.25, -bl * 0.5, k * 0.8, s.color, s.accent)
   } else {
     add(
       g,
@@ -238,11 +250,31 @@ function quadruped(s: Species) {
           by + bh * 0.6 + i * k * 0.04,
           bl * 0.42 + i * k * 0.07,
         )
-      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.7, 0x1b1b1f)
+      swish(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.7, 0x1b1b1f)
+      for (const sx of [-1, 1]) {
+        add(h, new THREE.BoxGeometry(k * 0.03, k * 0.1, k * 0.2), 0x1b1b1f, sx * k * 0.1, k * 0.06, k * 0.06)
+        add(
+          g,
+          new THREE.TorusGeometry(k * 0.075, k * 0.02, 5, 8),
+          0x1b1b1f,
+          sx * bw * 0.3,
+          hip * 0.55,
+          bl * 0.3,
+        ).rotation.x = Math.PI / 2
+      }
     } else if (id === 'lion') {
       const mane = add(h, new THREE.IcosahedronGeometry(k * 0.3, 1), s.accent, 0, 0, -k * 0.06)
       mane.scale.set(1.15, 1.1, 0.9)
-      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 1.0, s.color, s.accent)
+      // fuller mane running down the chest and shoulders, plus a pale muzzle and nose
+      add(g, new THREE.IcosahedronGeometry(k * 0.34, 1), s.accent, 0, by + bh * 0.05, bl * 0.34).scale.set(
+        1.1,
+        1.05,
+        0.9,
+      )
+      add(h, new THREE.BoxGeometry(k * 0.1, k * 0.06, k * 0.06), 0x3a2418, 0, k * 0.0, k * 0.46)
+      for (const sx of [-1, 1])
+        add(g, new THREE.SphereGeometry(k * 0.05, 6, 6), s.color, sx * bw * 0.28, by - bh * 0.4, bl * 0.3)
+      swish(g, 0, by + bh * 0.2, -bl * 0.5, k * 1.0, s.color, s.accent)
     } else if (id === 'elephant') {
       for (const sx of [-1, 1]) {
         const ear = add(
@@ -266,17 +298,42 @@ function quadruped(s: Species) {
         )
         tusk.rotation.x = 1.2
       }
-      const segs: [number, number, number, number][] = [
-        [0, -0.22, 0.6, 0.13],
-        [0, -0.55, 0.68, 0.11],
-        [0, -0.85, 0.76, 0.09],
-        [0, -1.1, 0.82, 0.075],
-      ]
-      for (const [x, y, z, r] of segs)
-        add(h, new THREE.CylinderGeometry(k * r, k * r * 0.88, k * 0.34, 7), s.color, x, k * y, k * z)
-      tail(g, 0, by + bh * 0.15, -bl * 0.52, k * 0.8, s.color, 0x6c6c78)
+      // trunk: a chain of segments that curls up at the tip
+      let prev: THREE.Object3D = h
+      const trunkBase = new THREE.Group()
+      trunkBase.position.set(0, -k * 0.12, k * 0.5)
+      h.add(trunkBase)
+      prev = trunkBase
+      const rots = [0.1, 0.2, 0.3, 0.45, 0.55]
+      rots.forEach((rot, i) => {
+        const r = k * (0.14 - i * 0.015),
+          len = k * 0.3
+        const sg = new THREE.Group()
+        sg.rotation.x = rot
+        add(sg, new THREE.CylinderGeometry(r * 0.88, r, len, 7), s.color, 0, -len / 2, 0)
+        const tip = new THREE.Group()
+        tip.position.y = -len
+        sg.add(tip)
+        prev.add(sg)
+        prev = tip
+      })
+      // toenails
+      for (const sx of [-1, 1])
+        add(h, new THREE.SphereGeometry(k * 0.06, 6, 6), 0x6c6c78, sx * k * 0.2, k * 0.1, k * 0.4)
+      swish(g, 0, by + bh * 0.15, -bl * 0.52, k * 0.8, s.color, 0x6c6c78)
     } else if (id === 'bear') {
-      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.25, s.color)
+      swish(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.25, s.color)
+      // shoulder hump, round ears, nose and lighter muzzle
+      add(g, new THREE.SphereGeometry(k * 0.32, 8, 8), s.color, 0, by + bh * 0.4, bl * 0.2).scale.set(
+        1.2,
+        0.9,
+        1.2,
+      )
+      for (const sx of [-1, 1]) {
+        add(h, new THREE.SphereGeometry(k * 0.1, 7, 7), s.color, sx * k * 0.17, k * 0.22, -k * 0.06)
+        add(h, new THREE.SphereGeometry(k * 0.05, 6, 6), 0x5a3f2a, sx * k * 0.17, k * 0.22, -k * 0.02)
+      }
+      add(h, new THREE.BoxGeometry(k * 0.09, k * 0.06, k * 0.06), 0x1a1210, 0, k * 0.0, k * 0.5)
     } else if (id === 'rhino') {
       // two horns, a big one and a little one, plus plated hide lines
       const K = k * 1.45
@@ -296,15 +353,28 @@ function quadruped(s: Species) {
         )
         fold.scale.x = bw / bh
       }
-      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.45, s.accent, 0x3a3a42)
+      swish(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.45, s.accent, 0x3a3a42)
     } else if (id === 'hippo') {
       const kk = k * 1.6
       for (const sx of [-1, 1])
         add(h, new THREE.SphereGeometry(kk * 0.035, 6, 6), s.accent, sx * kk * 0.08, kk * 0.06, kk * 0.44)
-      tail(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.3, s.accent)
+      swish(g, 0, by + bh * 0.2, -bl * 0.5, k * 0.3, s.accent)
+      // wide lower jaw, nostrils, tiny ears and tusks
+      add(h, new THREE.BoxGeometry(kk * 0.34, kk * 0.1, kk * 0.34), s.color, 0, -kk * 0.2, kk * 0.28)
+      for (const sx of [-1, 1]) {
+        add(h, new THREE.SphereGeometry(kk * 0.03, 5, 5), 0x4a3a44, sx * kk * 0.07, kk * 0.0, kk * 0.44)
+        add(
+          h,
+          new THREE.ConeGeometry(kk * 0.03, kk * 0.09, 5),
+          0xf4ecd6,
+          sx * kk * 0.12,
+          -kk * 0.13,
+          kk * 0.4,
+        )
+      }
     }
   }
-  g.userData.rig = { legs, speed: 7, amp: 0 } satisfies Rig
+  g.userData.rig = { legs, sway, speed: 7, amp: 0 } satisfies Rig
   return g
 }
 
@@ -585,40 +655,110 @@ const HAIRS = [0x2b1d14, 0x6a3f1e, 0xc9a040, 0x111111, 0x8a8a8a]
 const PANTS = [0x2f3a55, 0x3d3d3d, 0x5b4a37, 0x2b4a3a]
 const pick = <T>(a: T[]) => a[(Math.random() * a.length) | 0]
 
-export function personModel(shirt: number, keeper = false) {
+export type PersonKind = 'guest' | 'child' | 'teacher' | 'critic' | 'keeper'
+
+export function personModel(shirt: number, keeper: boolean | PersonKind = false) {
+  const kind: PersonKind = keeper === true ? 'keeper' : keeper === false ? 'guest' : keeper
   const skin = pick(SKINS),
     hair = pick(HAIRS),
-    pants = keeper ? 0x3b3f46 : pick(PANTS)
-  return fromTemplate(`person:${shirt}:${skin}:${hair}:${pants}:${keeper}`, () =>
-    buildPerson(shirt, keeper, skin, hair, pants),
+    pants = kind === 'keeper' ? 0x3b3f46 : pick(PANTS),
+    style = (Math.random() * 4) | 0
+  return fromTemplate(`person:${shirt}:${skin}:${hair}:${pants}:${kind}:${style}`, () =>
+    buildPerson(shirt, kind, skin, hair, pants, style),
   )
 }
 
-function buildPerson(shirt: number, keeper: boolean, skin: number, hair: number, pants: number) {
+function buildPerson(
+  shirt: number,
+  kind: PersonKind,
+  skin: number,
+  hair: number,
+  pants: number,
+  style: number,
+) {
   const g = new THREE.Group(),
-    legs: Limb[] = []
+    legs: Limb[] = [],
+    kid = kind === 'child',
+    legH = kid ? 0.2 : 0.27,
+    torsoH = kid ? 0.23 : 0.27,
+    shoulder = legH + torsoH - 0.03,
+    headR = kid ? 0.11 : 0.085,
+    headY = legH + torsoH + headR * 0.9
   for (const sx of [-1, 1]) {
     const leg = new THREE.Group()
-    leg.position.set(sx * 0.055, 0.27, 0)
-    add(leg, new THREE.CylinderGeometry(0.045, 0.04, 0.27, 6), pants, 0, -0.135, 0)
-    add(leg, new THREE.BoxGeometry(0.09, 0.04, 0.12), 0x1e1e22, 0, -0.26, 0.02)
+    leg.position.set(sx * 0.055, legH, 0)
+    add(leg, new THREE.CylinderGeometry(0.045, 0.04, legH, 6), pants, 0, -legH / 2, 0)
+    add(leg, new THREE.BoxGeometry(0.09, 0.04, 0.12), 0x1e1e22, 0, -legH + 0.01, 0.02)
     g.add(leg)
     legs.push({ o: leg, phase: sx > 0 ? 0 : Math.PI, k: 1 })
     const arm = new THREE.Group()
-    arm.position.set(sx * 0.13, 0.51, 0)
-    add(arm, new THREE.CylinderGeometry(0.035, 0.032, 0.22, 6), shirt, 0, -0.11, 0)
-    add(arm, new THREE.SphereGeometry(0.035, 6, 6), skin, 0, -0.24, 0)
+    arm.position.set(sx * 0.13, shoulder, 0)
+    const armLen = kid ? 0.17 : 0.22
+    add(arm, new THREE.CylinderGeometry(0.035, 0.032, armLen, 6), shirt, 0, -armLen / 2, 0)
+    add(arm, new THREE.SphereGeometry(0.035, 6, 6), skin, 0, -armLen - 0.02, 0)
     g.add(arm)
     legs.push({ o: arm, phase: sx > 0 ? Math.PI : 0, k: 0.8 })
   }
-  add(g, new THREE.BoxGeometry(0.2, 0.27, 0.12), shirt, 0, 0.405, 0)
-  add(g, new THREE.SphereGeometry(0.085, 10, 8), skin, 0, 0.63, 0)
-  if (keeper) {
-    add(g, new THREE.CylinderGeometry(0.093, 0.097, 0.05, 10), 0x1d3b75, 0, 0.69, 0)
-    add(g, new THREE.BoxGeometry(0.12, 0.014, 0.07), 0x1d3b75, 0, 0.67, 0.09)
+  add(g, new THREE.BoxGeometry(0.2, torsoH, 0.12), shirt, 0, legH + torsoH / 2, 0)
+  add(g, new THREE.SphereGeometry(headR, 10, 8), skin, 0, headY, 0)
+  for (const sx of [-1, 1])
+    add(g, new THREE.SphereGeometry(0.012, 5, 5), 0x1a1a1a, sx * headR * 0.36, headY + 0.01, headR * 0.9)
+  const topY = headY + headR * 0.9
+  if (kind === 'keeper') {
+    add(g, new THREE.CylinderGeometry(headR * 1.1, headR * 1.14, 0.05, 10), 0x1d3b75, 0, topY - 0.015, 0)
+    add(g, new THREE.BoxGeometry(0.12, 0.014, 0.07), 0x1d3b75, 0, topY - 0.04, headR * 1.05)
+    // work vest with a belt
+    add(g, new THREE.BoxGeometry(0.205, torsoH * 0.78, 0.125), 0xd9a441, 0, legH + torsoH * 0.55, 0)
+    add(g, new THREE.BoxGeometry(0.21, 0.03, 0.13), 0x3a2a1a, 0, legH + 0.02, 0)
+  } else if (kind === 'critic') {
+    add(g, new THREE.CylinderGeometry(0.13, 0.13, 0.015, 12), 0x1a1a1f, 0, topY - 0.03, 0)
+    add(g, new THREE.CylinderGeometry(0.075, 0.085, 0.09, 10), 0x1a1a1f, 0, topY + 0.015, 0)
+    add(g, new THREE.BoxGeometry(0.2, 0.03, 0.13), 0xd8d8d8, 0, legH + torsoH - 0.05, 0.005) // white scarf
+    add(g, new THREE.BoxGeometry(0.07, 0.09, 0.015), 0xf4ecd8, 0.14, shoulder - 0.2, 0.05) // notepad
   } else {
-    const h = add(g, new THREE.SphereGeometry(0.09, 10, 8), hair, 0, 0.655, -0.015)
-    h.scale.y = 0.75
+    if (kind === 'teacher') {
+      for (const sx of [-1, 1])
+        add(
+          g,
+          new THREE.BoxGeometry(0.05, 0.035, 0.01),
+          0x222222,
+          sx * headR * 0.36,
+          headY + 0.01,
+          headR * 0.98,
+        )
+      add(g, new THREE.BoxGeometry(0.1, 0.012, 0.01), 0x222222, 0, headY + 0.015, headR * 0.98)
+      add(g, new THREE.BoxGeometry(0.1, 0.13, 0.02), 0x8a5a3a, -0.13, shoulder - 0.2, 0.08) // clipboard
+    }
+    const sc = (hy: number, sy = 0.75) =>
+      add(g, new THREE.SphereGeometry(headR * 1.06, 10, 8), hair, 0, hy, -headR * 0.18).scale.set(1, sy, 1)
+    if (style === 0) sc(headY + headR * 0.28)
+    else if (style === 1) {
+      sc(headY + headR * 0.28)
+      add(
+        g,
+        new THREE.BoxGeometry(headR * 1.9, headR * 2.2, headR * 0.5),
+        hair,
+        0,
+        headY - headR * 0.55,
+        -headR * 0.8,
+      ) // long hair
+    } else if (style === 2) {
+      sc(headY + headR * 0.28)
+      add(g, new THREE.SphereGeometry(headR * 0.4, 7, 7), hair, 0, topY + 0.03, -headR * 0.5) // bun
+    } else {
+      sc(headY + headR * 0.2, 0.6)
+      add(g, new THREE.CylinderGeometry(headR * 1.9, headR * 1.9, 0.012, 12), 0xe8d08a, 0, topY - 0.02, 0) // sun hat
+      add(g, new THREE.CylinderGeometry(headR * 0.95, headR * 1.05, 0.05, 10), 0xe8d08a, 0, topY + 0.01, 0)
+    }
+    if (kind === 'guest' && style % 2 === 0)
+      add(
+        g,
+        new THREE.BoxGeometry(0.15, 0.2, 0.07),
+        shirt === 0 ? 0x444444 : 0x7a5a3a,
+        0,
+        legH + torsoH * 0.5,
+        -0.095,
+      ) // backpack
   }
   g.userData.rig = { legs, speed: 11, amp: 0 } satisfies Rig
   return g

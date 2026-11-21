@@ -94,13 +94,28 @@ export function propModel(id: string) {
       cyl(g, 0.03, 0.03, 0.14, 0xd93a2b, -0.2, 0.68, 0.22, 6)
       cyl(g, 0.03, 0.03, 0.14, 0xf2c230, -0.1, 0.68, 0.22, 6)
       box(g, 0.14, 0.1, 0.14, 0xf0e0b0, 0.25, 0.64, 0.22)
+      // menu board and a red stripe along the front
+      box(g, 0.34, 0.2, 0.03, 0x2c3a33, 0.2, 0.9, -0.38)
+      box(g, 0.24, 0.02, 0.01, 0xf4f1ea, 0.2, 0.95, -0.36)
+      box(g, 0.2, 0.02, 0.01, 0xf2c230, 0.2, 0.88, -0.36)
+      box(g, 0.8, 0.07, 0.02, 0xc0392b, 0, 0.3, 0.31)
       break
     case 'restroom':
-      box(g, 0.7, 1.0, 0.7, 0x7fa0b8, 0, 0.5, 0)
-      box(g, 0.82, 0.08, 0.82, 0x3f5568, 0, 1.04, 0)
-      box(g, 0.28, 0.72, 0.02, 0xf0f0f0, 0, 0.4, 0.36)
-      box(g, 0.1, 0.1, 0.02, 0x2f6fc4, -0.2, 0.82, 0.36)
-      box(g, 0.1, 0.1, 0.02, 0xd9548b, 0.2, 0.82, 0.36)
+      // low block on a plinth with two doors (blue/pink), a window strip and a sloped roof
+      box(g, 0.76, 0.08, 0.76, 0x9aa3ab, 0, 0.04, 0)
+      box(g, 0.7, 0.72, 0.7, 0x7fa0b8, 0, 0.44, 0)
+      box(g, 0.78, 0.06, 0.78, 0x3f5568, 0, 0.83, 0)
+      box(g, 0.8, 0.05, 0.84, 0x4d667c, 0, 0.88, -0.02).rotation.x = -0.12
+      for (const [sx, c] of [
+        [-1, 0x2f6fc4],
+        [1, 0xd9548b],
+      ] as const) {
+        box(g, 0.22, 0.52, 0.02, 0xf0f0f0, sx * 0.17, 0.34, 0.36)
+        box(g, 0.1, 0.1, 0.025, c, sx * 0.17, 0.58, 0.365)
+        box(g, 0.02, 0.05, 0.03, 0x3a3a3a, sx * 0.08, 0.34, 0.37)
+      }
+      box(g, 0.5, 0.06, 0.02, 0xbfe6f0, 0, 0.72, 0.36)
+      cyl(g, 0.03, 0.03, 0.12, 0x9aa3ab, 0.25, 0.94, -0.2, 6)
       break
     case 'gift': {
       box(g, 0.9, 0.75, 0.75, 0xe58fa8, 0, 0.375, 0)
@@ -114,23 +129,41 @@ export function propModel(id: string) {
       awning(g, 0.9, 0.78, 0.5, 0x3aa6a0, 0xf4f1ea)
       box(g, 0.16, 0.16, 0.16, 0xf2c230, 0, 1.25, 0)
       box(g, 0.17, 0.03, 0.03, 0xd93a2b, 0, 1.25, 0.08)
+      box(g, 0.03, 0.17, 0.03, 0xd93a2b, 0, 1.25, 0.08)
+      // window display of plush toys and a sign over the door
+      ball(g, 0.05, 0xf4f1ea, 0.15, 0.4, 0.4)
+      ball(g, 0.04, 0xf4f1ea, 0.15, 0.45, 0.4)
+      ball(g, 0.05, 0x8a5a3a, 0.29, 0.4, 0.4)
+      box(g, 0.3, 0.07, 0.03, 0xf4ecd8, -0.2, 0.64, 0.39)
       break
     }
     case 'tree':
-      cyl(g, 0.06, 0.09, 0.5, 0x5a3f2a, 0, 0.25, 0, 6)
-      ball(g, 0.38, 0x3f7d3a, 0, 0.78, 0)
-      ball(g, 0.26, 0x4a8f43, 0.18, 1.0, 0.05)
+      cyl(g, 0.06, 0.09, 0.55, 0x5a3f2a, 0, 0.27, 0, 6)
+      ball(g, 0.4, 0x3f7d3a, 0, 0.85, 0)
+      ball(g, 0.28, 0x4a8f43, 0.2, 1.06, 0.06)
+      ball(g, 0.22, 0x357033, -0.2, 0.98, -0.08)
+      for (const [x, z] of [
+        [0.12, 0.1],
+        [-0.1, 0.12],
+      ])
+        ball(g, 0.05, 0x7a7a72, x, 0.03, z)
       break
     case 'flowers': {
       const mound = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.08, 8), mat(0x3f7d3a))
       mound.position.y = 0.04
       g.add(mound)
       const cols = [0xe94f64, 0xf2c230, 0xf4f1ea, 0x9b6bd6, 0xf08a3c]
-      for (let i = 0; i < 9; i++) {
-        const a = i * 2.4
-        const r = 0.05 + (i % 3) * 0.09
-        ball(g, 0.05, cols[i % cols.length], Math.cos(a) * r, 0.13, Math.sin(a) * r)
+      for (let i = 0; i < 14; i++) {
+        const a = i * 2.4,
+          r = 0.05 + (i % 4) * 0.075
+        const x = Math.cos(a) * r,
+          z = Math.sin(a) * r
+        cyl(g, 0.008, 0.008, 0.1 + (i % 3) * 0.03, 0x3a7a35, x, 0.1, z, 4)
+        ball(g, 0.045, cols[i % cols.length], x, 0.17 + (i % 3) * 0.03, z)
+        ball(g, 0.018, 0xf2c230, x, 0.2 + (i % 3) * 0.03, z)
       }
+      for (let i = 0; i < 8; i++)
+        ball(g, 0.05, 0x7a7a72, Math.cos(i * 0.785) * 0.4, 0.04, Math.sin(i * 0.785) * 0.4)
       break
     }
     case 'bench':
@@ -138,6 +171,9 @@ export function propModel(id: string) {
       box(g, 0.72, 0.3, 0.05, 0x8a5a2b, 0, 0.5, -0.12)
       box(g, 0.06, 0.28, 0.24, 0x3a3a3a, -0.3, 0.14, 0)
       box(g, 0.06, 0.28, 0.24, 0x3a3a3a, 0.3, 0.14, 0)
+      box(g, 0.72, 0.03, 0.05, 0x6b431f, 0, 0.6, -0.12)
+      box(g, 0.72, 0.03, 0.05, 0x6b431f, 0, 0.42, -0.12)
+      for (const sx of [-1, 1]) box(g, 0.05, 0.04, 0.24, 0x3a3a3a, sx * 0.34, 0.4, 0)
       break
     case 'icecream': {
       // a little cart: pale blue body, striped umbrella, and a cone on a sign
@@ -204,6 +240,17 @@ export function propModel(id: string) {
       box(g, 0.2, 0.42, 0.02, 0x7fa0b8, 0.24, 0.23, 0.36)
       box(g, 0.2, 0.2, 0.02, 0xbfe6f0, -0.24, 0.36, 0.36)
       box(g, 0.5, 0.12, 0.03, 0x3f8f6a, 0, 0.9, 0.3)
+      // pitched roof, step, paw-print sign and a bush
+      const gable = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.26, 4), mat(0x3f8f6a))
+      gable.position.y = 0.9
+      gable.rotation.y = Math.PI / 4
+      gable.scale.set(1.05, 1, 0.9)
+      gable.castShadow = true
+      g.add(gable)
+      box(g, 0.34, 0.04, 0.12, 0xb9c0c6, 0.24, 0.02, 0.42)
+      ball(g, 0.05, 0x8a5a3a, -0.3, 0.7, 0.4)
+      for (const px of [-0.34, -0.3, -0.26]) ball(g, 0.018, 0x8a5a3a, px, 0.75, 0.4)
+      ball(g, 0.1, 0x3f7d3a, -0.38, 0.1, 0.42)
       break
     case 'lamp': {
       cyl(g, 0.03, 0.04, 1.3, 0x2c2f33, 0, 0.65, 0, 6)
@@ -221,6 +268,7 @@ export function propModel(id: string) {
       pool.rotation.x = -Math.PI / 2
       pool.position.y = 0.07
       pool.renderOrder = 2
+      pool.userData.noFrame = true
       g.add(pool)
       break
     }

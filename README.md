@@ -5,7 +5,7 @@ A 3D zoo simulator (Three.js + Vite + TypeScript). Play it in the browser or as 
 
 ## Play
 
-- **In the browser:** the latest push to `main` is deployed to GitHub Pages.
+- **In the browser:** <https://isaacjperman-lgtm.github.io/zoo-game/> (the latest push to `main` is deployed to GitHub Pages).
 - **Linux:** download `Zoo-Keeper-1.0.0-linux-x64.AppImage`, make it executable (`chmod +x`), and run it.
 - **Windows:** download `Zoo-Keeper-1.0.0-win-x64.exe` and run it. It is portable, so nothing is installed. The build is
   unsigned, so Windows may warn you the first time; choose "More info" and "Run anyway".

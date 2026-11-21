@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "app": "npm run build && electron .",
     "dist:linux": "npm run build && electron-builder --linux AppImage",
+    "dist:pi": "npm run build && electron-builder --linux AppImage --arm64",
     "dist:win": "npm run build && electron-builder --win portable",
     "dist": "npm run build && electron-builder --linux AppImage --win portable"
   },

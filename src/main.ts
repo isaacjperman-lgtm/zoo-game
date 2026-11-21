@@ -15,17 +15,22 @@ import { lampMat, lampGlowMat, stageLightMat } from './entities/props'
 import type { Animal } from './entities/animal'
 import type { Keeper } from './entities/people'
 
+import { quality } from './quality'
+
 const game = new Game()
 if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game // for debugging in the console
 const loaded = game.load()
 
 // ---------- renderer ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-const maxRatio = Math.min(devicePixelRatio, 2)
-let ratio = Math.min(maxRatio, 1.75) // hi-dpi screens start a little under full resolution
+const renderer = new THREE.WebGLRenderer({
+  antialias: quality.antialias,
+  powerPreference: 'high-performance',
+})
+const maxRatio = quality.maxRatio
+let ratio = quality.startRatio // hi-dpi screens start a little under full resolution
 renderer.setPixelRatio(ratio)
 renderer.setSize(innerWidth, innerHeight)
-renderer.shadowMap.enabled = true
+renderer.shadowMap.enabled = quality.shadows
 renderer.shadowMap.autoUpdate = false // refreshed every other frame, see optimizeShadows
 renderer.shadowMap.needsUpdate = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -54,7 +59,7 @@ controls.dampingFactor = 0.08
 controls.target.set(0, 0, 12)
 
 const sun = new THREE.DirectionalLight(0xffffff, 3)
-sun.castShadow = true
+sun.castShadow = quality.shadows
 sun.shadow.mapSize.set(2048, 2048)
 Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 200 })
 sun.shadow.bias = -0.0004
@@ -378,6 +383,7 @@ addEventListener('resize', () => {
 // If frames take too long the picture is rendered at a lower resolution, and it creeps back up when there is
 // headroom. ?fixedres in the address turns this off (useful when measuring).
 const fixedRes = location.search.includes('fixedres')
+const fpsTarget = quality.maxFps || 60
 let frameAvg = 1 / 60,
   slowFor = 0,
   fastFor = 0,
@@ -390,11 +396,11 @@ function setRatio(r: number) {
 function adaptResolution(dt: number) {
   frameAvg += (dt - frameAvg) * 0.05
   if (fixedRes || (adaptCooldown -= dt) > 0) return
-  if (frameAvg > 1 / 40) ((slowFor += dt), (fastFor = 0))
-  else if (frameAvg < 1 / 56) ((fastFor += dt), (slowFor = 0))
+  if (frameAvg > 1 / (fpsTarget * 0.67)) ((slowFor += dt), (fastFor = 0))
+  else if (frameAvg < 1 / (fpsTarget * 0.93)) ((fastFor += dt), (slowFor = 0))
   else slowFor = fastFor = 0
-  if (slowFor > 1.5 && ratio > 0.7) {
-    setRatio(Math.max(0.7, ratio - 0.15))
+  if (slowFor > 1.5 && ratio > quality.minRatio) {
+    setRatio(Math.max(quality.minRatio, ratio - 0.15))
     slowFor = 0
     adaptCooldown = 2
   } else if (fastFor > 5 && ratio < maxRatio) {
@@ -409,6 +415,7 @@ function adaptResolution(dt: number) {
 let shadowFrame = 0,
   shadowLodT = 0
 function optimizeShadows(dt: number) {
+  if (!quality.shadows) return
   renderer.shadowMap.needsUpdate = (shadowFrame++ & 1) === 0
   if ((shadowLodT -= dt) > 0) return
   shadowLodT = 0.3
@@ -436,7 +443,7 @@ function takePhoto(): string {
     renderer.setPixelRatio(maxRatio)
     renderer.setSize(innerWidth, innerHeight)
   }
-  renderer.shadowMap.needsUpdate = true
+  renderer.shadowMap.needsUpdate = quality.shadows
   renderer.render(scene, camera)
   const src = renderer.domElement
   const c = document.createElement('canvas')
@@ -482,7 +489,7 @@ const sunDir = new THREE.Vector3(),
 // ---------- lamp light ----------
 // Every lamp paints a glow on the ground (cheap, always on at night); the few nearest the camera also get a real
 // point light, so animals, guests and trees around them are lit too.
-const LAMP_LIGHTS = 8
+const LAMP_LIGHTS = quality.lampLights
 const lampLights = Array.from({ length: LAMP_LIGHTS }, () => {
   const l = new THREE.PointLight(0xffc880, 0, 9, 1.6)
   scene.add(l)
@@ -515,7 +522,7 @@ function updateLampLight(night: number, dt: number) {
   lampLights.forEach((l, i) => (l.intensity = lampList[i] ? night * 6 : 0))
 }
 // ---------- weather ----------
-const RAIN = 3200
+const RAIN = quality.raindrops
 const rainPos = new Float32Array(RAIN * 6)
 const rainBase = new Float32Array(RAIN * 3)
 for (let i = 0; i < RAIN; i++) {
@@ -587,7 +594,17 @@ function followSelected(dt: number) {
   }
   camera.position.copy(controls.target).add(rel)
 }
+let lastFrameMs = 0
 function frame() {
+  if (quality.maxFps) {
+    // frame cap: skip this display refresh if the last frame was drawn too recently
+    const now = performance.now()
+    if (now - lastFrameMs < 1000 / quality.maxFps - 3) {
+      requestAnimationFrame(frame)
+      return
+    }
+    lastFrameMs = now
+  }
   const real = Math.min(clock.getDelta(), 0.1),
     t = clock.elapsedTime
   game.update(real * speed)

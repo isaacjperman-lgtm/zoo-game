@@ -2,6 +2,13 @@
 
 All notable changes to Zoo Keeper are listed here, newest first.
 
+## [Unreleased]
+
+### Raspberry Pi 5 / low-end machines
+
+- New low graphics mode (`src/quality.ts`), chosen automatically on ARM computers and software or mobile GPUs: no shadows, no real-time lamp lights, no antialiasing, 1x pixel resolution, fewer trees and raindrops, and a 30 fps cap. Force it with `?quality=low` / `?quality=high` in the address, or `--quality=low` when starting the desktop app.
+- `npm run dist:pi` builds a Linux arm64 AppImage (`Zoo-Keeper-<version>-linux-arm64.AppImage`).
+
 ## [1.0.0] - 2026-11-20
 
 The first full release. It collects everything built since the original generic base into one game, and adds desktop

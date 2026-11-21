@@ -10,6 +10,15 @@ if (!app.requestSingleInstanceLock()) app.quit()
 // (the game only ever loads its own bundled files).
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
 if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox')
+if (process.platform === 'linux') {
+  // Raspberry Pi and other small ARM boards: use the GPU for drawing and rasterizing, and don't let Chromium
+  // fall back to software rendering. `--quality=low|high` on the command line overrides the automatic choice.
+  app.commandLine.appendSwitch('enable-gpu-rasterization')
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+  app.commandLine.appendSwitch('disable-frame-rate-limit') // the game has its own cap on slow machines
+  if (process.arch === 'arm64' || process.arch === 'arm') app.commandLine.appendSwitch('use-gl', 'egl')
+}
+const qArg = process.argv.find((a) => a.startsWith('--quality='))
 
 Menu.setApplicationMenu(null)
 
@@ -27,7 +36,11 @@ function createWindow() {
     webPreferences: { contextIsolation: true, sandbox: true, spellcheck: false, backgroundThrottling: false },
   })
   win.once('ready-to-show', () => win.show())
-  win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+  const q = qArg && qArg.split('=')[1]
+  win.loadFile(
+    path.join(__dirname, '..', 'dist', 'index.html'),
+    q === 'low' || q === 'high' ? { query: { quality: q } } : undefined,
+  )
 
   // anything that isn't the game itself opens in the normal browser
   win.webContents.setWindowOpenHandler(({ url }) => {

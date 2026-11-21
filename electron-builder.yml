@@ -12,7 +12,7 @@ compression: normal
 artifactName: Zoo-Keeper-${version}-${os}-${arch}.${ext}
 linux:
   target: AppImage
-  artifactName: Zoo-Keeper-${version}-linux-x64.${ext}
+  artifactName: Zoo-Keeper-${version}-linux-${arch}.${ext}
   category: Game
   icon: build/icon.png
 win:

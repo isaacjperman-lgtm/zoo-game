@@ -21,6 +21,7 @@ F11 toggles full screen.
 - **Nothing happens when I open it.** Only one copy can run at a time, so a copy that is stuck in the background makes
   every new launch quit silently. Stop it with `pkill zoo-keeper` (Linux) or by ending "Zoo Keeper" in Task Manager
   (Windows), then open it again.
+- **Raspberry Pi / slow computers.** The game switches to a low graphics mode by itself on ARM boards (no shadows, 30 fps cap). Force it with `--quality=low` when starting the app, or `?quality=low` in the browser. On a Pi 5 use a 64-bit OS with the GPU driver enabled (Raspberry Pi OS Bookworm or newer) and the arm64 AppImage (`npm run dist:pi`).
 - **It is laggy.** Make sure your graphics driver is installed and up to date. Launch the Linux AppImage from a
   terminal to see any graphics errors it prints. Running it from a restricted shell or sandbox can also break
   graphics, so start it from your normal desktop session.

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { quality } from '../quality'
 import { N, BOOTH, toWorld } from '../config'
 import { mat, personModel } from '../entities/models'
 
@@ -40,7 +41,7 @@ export function createEnvironment(scene: THREE.Scene) {
   const trees: Tree[] = []
   const free = (x: number, z: number) =>
     !(Math.abs(x) < half + 3 && Math.abs(z) < half + 3) && !(z > 0 && x > -6 && x < 7)
-  for (let guard = 0; trees.length < 380 && guard < 6000; guard++) {
+  for (let guard = 0; trees.length < quality.trees && guard < 6000; guard++) {
     const a = r() * Math.PI * 2,
       d = 26 + Math.pow(r(), 1.4) * 170
     const x = Math.cos(a) * d,
@@ -175,11 +176,14 @@ export function createEnvironment(scene: THREE.Scene) {
     cap.position.set(px, 2.47, gz)
     const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.3, 0.28), lanternMat)
     lantern.position.set(px, 2.7, gz)
-    const light = new THREE.PointLight(0xffc880, 0, 14, 2)
-    light.position.set(px, 2.9, gz + 0.3)
     pillar.castShadow = cap.castShadow = true
-    scene.add(pillar, cap, lantern, light)
-    lights.push(light)
+    scene.add(pillar, cap, lantern)
+    if (quality.gateLights) {
+      const light = new THREE.PointLight(0xffc880, 0, 14, 2)
+      light.position.set(px, 2.9, gz + 0.3)
+      scene.add(light)
+      lights.push(light)
+    }
   }
   const beam = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.35, 0.4), wood)
   beam.position.set(gx, 2.55, gz)
